@@ -5,9 +5,10 @@
 > `../Chernobyl`, `../Chernobyl2`, and `../uapd`, and emits a recurring **JSON
 > instrumentation log** so game state can be reconstructed after any bug.
 
-Status: **v0.1 — playable vertical slice** (one room, core mechanics, full
-instrumentation). This document is the north star for growing the slice into the
-full game.
+Status: **v0.2 — M1 complete** (the four-room Sunken Mines area loaded from
+external `.lvl` files: room graph + doors, keys/locked doors, lever→bridge,
+checkpoints; full JSON instrumentation; `--selftest` + `--headless`). This
+document is the north star for growing it into the full game.
 
 ---
 
@@ -174,24 +175,44 @@ is an optional objective.
 - **Areas → rooms.** Four areas (Sunken Mines, the Mire, the Ashlands, the
   Usurper's Keep), each a graph of **rooms**. A room is one screen-or-wider tiled
   space with a fixed camera-follow.
-- **Tile model.** Levels are tile grids (default **32 px** tiles). The vertical
-  slice embeds its room as an **ASCII map in source**; the production format is an
-  external `levels/<area>/<room>.lvl` text file with the same legend, plus a
-  header line and an entity section. Keeping the in-source and on-disk legends
-  identical means the slice's parser *is* the level loader.
+- **Tile model.** Levels are tile grids (default **32 px** tiles), loaded from
+  external `levels/<area>/<room>.lvl` text files (M1). Each file is a short
+  `@`-directive header followed by the ASCII grid. A built-in fallback room boots
+  if a file is missing, so the game never hard-fails. (Off-grid sides/top read as
+  solid; below the grid is open void — a fatal fall.)
 
 ```
-Legend (ASCII level format)
-  #  solid block            S  shadow alcove (cover)
-  .  empty / air            ^  spike bed (hazard)
-  =  one-way platform       _  pit (fatal below)
-  |  ledge marker (climb)   D  door / exit
-  K  key pickup             B  bomb pickup
-  H  health pickup          *  Daystone shard
-  g  guard (enemy)          n  Aurithi NPC
-  L  lever / switch         P  player spawn
+.lvl format (M1)
+  Header directives (one per line, before the grid):
+    @area  <name...>                         display area name
+    @room  <name>                            display room name
+    @door  <id> <targetRoom> <targetSpawn> [lock <color>]
+           digit <id> in the grid is this door; on use it loads
+           <targetRoom>.lvl and spawns the player at that room's door
+           <targetSpawn>. "exit" as target clears the area. "lock <color>"
+           requires a key of that colour to pass.
+    @lever <id> bridge                        (documentation; see 'L'/'b' below)
+    ;  comment line
+
+  Grid legend:
+    #  solid block            S  shadow alcove (cover)
+    .  empty / air            ^  spike bed (hazard)
+    b  bridge (solid only while a lever is thrown)
+    0-9 door (id, see @door)   C  checkpoint
+    K  gold key                B  bomb pickup
+    H  health pickup           *  Daystone shard
+    g  guard (enemy)           n  Aurithi NPC
+    L  lever (extends bridges) P  player spawn (first room / fallback)
 ```
 
+- **Room graph.** Doors link rooms by `(targetRoom, targetSpawn)`; the player
+  spawns one tile *inside* the target door, facing in. Inventory (keys, bombs,
+  shards, ammo, hp) persists across rooms; enemies/pickups are room-scoped.
+- **Checkpoints.** Entering a room and touching a `C` tile both set the respawn
+  point; death restores the checkpoint room + position with full health.
+- **Validation.** `--selftest` loads every room in an area and checks that each
+  door target room exists and contains the referenced spawn door, emitting a JSON
+  report — a fast, deterministic guard against broken level wiring.
 - **Camera.** Smooth horizontal follow with vertical easing, clamped to room
   bounds. Cinematic per-room snapping is an option flag for set-pieces.
 
@@ -344,10 +365,13 @@ The on-screen **debug overlay** (`` ` ``) shows the same snapshot fields plus th
 last few discrete events, so the live view and the log always agree.
 
 ### 6.5 Dev affordances (debug build)
-`--no-enemies` (empty room for traversal tuning), `--frames N` (run N frames then
-quit — deterministic capture for CI/repro), `--shot N` (screenshot at frame N),
-`--rate N` (snapshot cadence), plus in-game toggles `G` god, `H` hitboxes,
-`R` respawn. All toggles emit a `mode` event so the log records the exact harness.
+`--headless` (run the sim with no window — deterministic capture on SSH/CI),
+`--selftest` (validate the room graph and exit), `--room PATH` / `--spawn ID`
+(boot straight into a specific room/entrance), `--no-enemies`, `--god`, `--demo`
+(scripted attract/auto-play), `--frames N` (run N frames then quit), `--shot N`
+(screenshot at frame N), `--rate N` (snapshot cadence), plus in-game toggles
+`G` god, `H` hitboxes, `N` no-enemies, `R` respawn. Toggles emit a `mode` event
+so the log records the exact harness.
 
 ---
 
@@ -367,16 +391,19 @@ incremental and instant when nothing changed.
 
 ## 8. Roadmap
 
-- **M0 — Vertical slice (this commit).** One room; weighty no-jump movement;
-  ledge climb up/down; shadow-cover; shotgun forward **and** back; one-to-two
-  guards with line-of-sight fire; HP/ammo/death/respawn; pickups; full JSON
-  instrumentation + overlay. `./run.sh` boots straight into it.
-- **M1 — Room graph + level files.** External `.lvl` loader, doors between rooms,
-  keys/locked doors, levers→lifts/bridges, checkpoints, the first full area
-  (Sunken Mines).
+- **M0 — Vertical slice. ✅ done.** One room; weighty no-jump movement; ledge
+  climb up/down; shadow-cover; shotgun forward **and** back; guards with
+  line-of-sight fire; HP/ammo/death/respawn; pickups; full JSON instrumentation
+  + overlay.
+- **M1 — Room graph + level files. ✅ done.** External `.lvl` loader + built-in
+  fallback; the four-room **Sunken Mines** area; doors forming a room graph;
+  gold key + locked door; lever→**bridge** over a shaft; checkpoints with
+  checkpoint-respawn; `--selftest` graph validation; `--headless` deterministic
+  capture. (Moving **lifts** — platforms that carry the player — were deferred to
+  M2 with the rest of the dynamic-physics work; M1 ships bridges.)
 - **M2 — Combat & items depth.** Ammo economy + reload, thrown/placed bombs &
-  cracked walls, shotgun upgrades, enemy variety and smarter AI (use cover,
-  flank), audio.
+  cracked walls, **moving lifts/platforms**, shotgun upgrades, enemy variety and
+  smarter AI (use cover, flank), audio.
 - **M3 — NPCs & narrative.** Freed Aurithi, hints/passwords, the Daystone-shard
   gate, area transitions, the four areas end-to-end.
 - **M4 — Polish.** Original sprite art over the primitives, music, menus,

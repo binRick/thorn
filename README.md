@@ -5,14 +5,17 @@ on **raylib 6.0**. Weighty, no-jump traversal; a pump-shotgun that fires forward
 **and over the shoulder**; ducking into background **shadow alcoves** to let
 bullets pass. Original art, naming, and levels — see **[DESIGN.md](DESIGN.md)**.
 
-Status: **v0.1 — playable vertical slice** (one room with the full mechanic set
-and complete JSON instrumentation).
+Status: **v0.2 — M1 complete**: the four-room **Sunken Mines** area, loaded from
+external `.lvl` files — a room graph with doors, a gold key + locked door, a
+lever that extends a bridge over a shaft, and checkpoints. Full JSON
+instrumentation throughout.
 
 ## Run
 
 ```bash
 ./run.sh                 # builds vendored raylib 6.0 on first run, then the game
-./run.sh --no-enemies    # extra flags pass straight through
+./run.sh --room levels/sunken_mines/shaft.lvl   # boot straight into a room
+./run.sh --selftest      # validate the room graph and exit (no window)
 ./run.sh --demo          # attract/auto-play (deterministic input)
 ```
 
@@ -37,9 +40,11 @@ source into `vendor/` (a few minutes, once). After that, launches are instant.
 ## Instrumentation (JSON log)
 
 `run.sh` always launches with `--debug`, which streams newline-delimited JSON to
-`./thorn-debug.log`: a recurring **~5 Hz `state` snapshot** plus discrete events
-(`fire`, `hit`, `death`, `climb`, `cover`, `pickup`, `door`, …). The whole point:
-when you hit a bug, the log lets the game state be reconstructed frame-by-frame.
+`./thorn-debug.log`: a recurring **~5 Hz `state` snapshot** (now including the
+current `room` and `bridge` state) plus discrete events (`fire`, `hit`, `death`,
+`climb`, `cover`, `pickup`, `door`, `transition`, `lever`, `checkpoint`, …). The
+whole point: when you hit a bug, the log lets the game state be reconstructed
+frame-by-frame.
 
 ```bash
 tail -f thorn-debug.log | jq -c .                                   # live
@@ -48,9 +53,11 @@ jq -c 'select(.ev=="death" or .ev=="hit" or .ev=="fire")' thorn-debug.log
 ./debug.sh               # build + run, tee the log to /tmp for sharing
 ```
 
-Useful flags: `--rate N` (snapshot cadence in frames; `0` = every frame),
-`--frames N` (run N frames then quit — deterministic capture), `--shot N`
-(screenshot at frame N), `--god`, `--no-enemies`, `--demo`.
+Useful flags: `--headless` (run with no window — deterministic capture for
+CI/SSH), `--selftest` (validate the room graph), `--room PATH` / `--spawn ID`
+(boot into a specific room/entrance), `--rate N` (snapshot cadence; `0` = every
+frame), `--frames N` (run N then quit), `--shot N` (screenshot at frame N),
+`--god`, `--no-enemies`, `--demo`.
 
 ## Layout
 
@@ -58,6 +65,7 @@ Useful flags: `--rate N` (snapshot cadence in frames; `0` = every frame),
 run.sh debug.sh Makefile   entry points + build (Makefile `raylib6` vendors raylib 6.0)
 DESIGN.md README.md         design doc + this file
 src/main.c                  the game (single translation unit)
+levels/sunken_mines/*.lvl   the first area's rooms (external level files)
 vendor/                     vendored raylib 6.0 (gitignored, rebuilt on demand)
 ```
 
