@@ -1,0 +1,13 @@
+Thorn — audio credits
+=====================
+
+shotgun_fire.mp3
+  Source : Freesound community pool (original file:
+           freesound_community-shotgun-firing-3-14483.mp3)
+  Use    : shotgun fire sound effect (SND_FIRE)
+  License: Freesound community sounds are provided for reuse. Confirm the exact
+           license (CC0 / CC-BY) for this specific sound on freesound.org before
+           redistributing, and add attribution here if CC-BY.
+
+All other sound effects are synthesized procedurally in code (src/main.c,
+GenTone / InitAudio) and are original to this project.

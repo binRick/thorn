@@ -888,7 +888,8 @@ static Sound GenTone(float dur,float f0,float f1,int wf,float vol){
 }
 static void InitAudio(void){
     InitAudioDevice(); if(!IsAudioDeviceReady()) return;
-    g_snd[SND_FIRE]      = GenTone(0.18f,220, 80,2,0.9f);
+    // Shotgun: use the supplied sample if present, else fall back to the synth.
+    g_snd[SND_FIRE]      = FileExists("assets/sounds/shotgun_fire.mp3") ? LoadSound("assets/sounds/shotgun_fire.mp3") : GenTone(0.18f,220,80,2,0.9f);
     g_snd[SND_DRY]       = GenTone(0.05f,420,300,1,0.4f);
     g_snd[SND_RELOAD]    = GenTone(0.12f,180,140,1,0.5f);
     g_snd[SND_ENEMYFIRE] = GenTone(0.16f,160, 70,2,0.7f);
