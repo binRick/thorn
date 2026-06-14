@@ -5,10 +5,11 @@ on **raylib 6.0**. Weighty, no-jump traversal; a pump-shotgun that fires forward
 **and over the shoulder**; ducking into background **shadow alcoves** to let
 bullets pass. Original art, naming, and levels — see **[DESIGN.md](DESIGN.md)**.
 
-Status: **v0.2 — M1 complete**: the four-room **Sunken Mines** area, loaded from
-external `.lvl` files — a room graph with doors, a gold key + locked door, a
-lever that extends a bridge over a shaft, and checkpoints. Full JSON
-instrumentation throughout.
+Status: **v0.3 — M2 complete**: combat & items depth on top of the Sunken Mines
+area — magazine/reserve ammo with auto-reload, shotgun power/speed upgrades,
+placed bombs that blow cracked walls, moving lifts that carry you, three enemy
+types (shooter / advancing brute / cover-using sentry), and procedural audio.
+Built on the M1 room graph (doors, keys/locked doors, lever→bridge, checkpoints).
 
 ## Run
 
@@ -32,7 +33,7 @@ source into `vendor/` (a few minutes, once). After that, launches are instant.
 | Walk (careful) | `Shift` |
 | Fire forward | `Space` / `J` |
 | **Fire backward (over the shoulder)** | `K` |
-| Use / cycle item | `E` / `Q` |
+| Place bomb (blows cracked walls) | `E` |
 | Pause · Debug overlay | `P` · `` ` `` or `Tab` |
 | Respawn · God · Hitboxes (dev) | `R` · `G` · `H` |
 | Quit | `Esc` |

@@ -5,10 +5,11 @@
 > `../Chernobyl`, `../Chernobyl2`, and `../uapd`, and emits a recurring **JSON
 > instrumentation log** so game state can be reconstructed after any bug.
 
-Status: **v0.2 — M1 complete** (the four-room Sunken Mines area loaded from
-external `.lvl` files: room graph + doors, keys/locked doors, lever→bridge,
-checkpoints; full JSON instrumentation; `--selftest` + `--headless`). This
-document is the north star for growing it into the full game.
+Status: **v0.3 — M2 complete** (combat & items depth on top of the M1 area:
+magazine/reserve ammo with auto-reload, shotgun power/speed upgrades, placed
+bombs that blow cracked walls, moving lifts that carry the player, three enemy
+types incl. cover-using and advancing AI, and procedural audio; full JSON
+instrumentation; `--selftest` + `--headless`). North star for the full game.
 
 ---
 
@@ -161,7 +162,8 @@ is an optional objective.
 | Walk (careful) | `Shift` |
 | **Fire forward** | `Space` or `J` |
 | **Fire backward (over shoulder)** | `K` |
-| Use item / cycle item | `E` / `Q` |
+| Place bomb | `E` |
+| Reload | automatic when the magazine empties (if shells remain) |
 | Pause | `P` |
 | Debug overlay | `` ` `` or `Tab` |
 | Respawn (dev) | `R` |
@@ -182,7 +184,7 @@ is an optional objective.
   solid; below the grid is open void — a fatal fall.)
 
 ```
-.lvl format (M1)
+.lvl format (M1/M2)
   Header directives (one per line, before the grid):
     @area  <name...>                         display area name
     @room  <name>                            display room name
@@ -191,18 +193,23 @@ is an optional objective.
            <targetRoom>.lvl and spawns the player at that room's door
            <targetSpawn>. "exit" as target clears the area. "lock <color>"
            requires a key of that colour to pass.
-    @lever <id> bridge                        (documentation; see 'L'/'b' below)
+    @lift  <c> <r> <w> <v|h> <range> <period>   (M2) moving platform: a w-tile
+           bar at tile (c,r) oscillating <range> tiles vertically/horizontally
+           every <period> seconds; carries whoever stands on it.
     ;  comment line
 
   Grid legend:
     #  solid block            S  shadow alcove (cover)
     .  empty / air            ^  spike bed (hazard)
-    b  bridge (solid only while a lever is thrown)
+    b  bridge (lever-toggled) x  cracked wall (bombable)        (M2)
     0-9 door (id, see @door)   C  checkpoint
     K  gold key                B  bomb pickup
+    a  shells (ammo)           u / U  speed / power upgrade      (M2)
     H  health pickup           *  Daystone shard
-    g  guard (enemy)           n  Aurithi NPC
-    L  lever (extends bridges) P  player spawn (first room / fallback)
+    g  SKARL (shooter)         G  BRUTE (advancing melee)        (M2)
+    s  SENTRY (shoots, ducks into cover)                          (M2)
+    n  Aurithi NPC             L  lever (extends bridges)
+    P  player spawn (first room / fallback)
 ```
 
 - **Room graph.** Doors link rooms by `(targetRoom, targetSpawn)`; the player
@@ -401,9 +408,14 @@ incremental and instant when nothing changed.
   checkpoint-respawn; `--selftest` graph validation; `--headless` deterministic
   capture. (Moving **lifts** — platforms that carry the player — were deferred to
   M2 with the rest of the dynamic-physics work; M1 ships bridges.)
-- **M2 — Combat & items depth.** Ammo economy + reload, thrown/placed bombs &
-  cracked walls, **moving lifts/platforms**, shotgun upgrades, enemy variety and
-  smarter AI (use cover, flank), audio.
+- **M2 — Combat & items depth. ✅ done.** Magazine/reserve ammo with auto-reload
+  + shell pickups; shotgun **power/speed upgrades**; **placed bombs** that blow
+  **cracked walls** (and damage clusters); **moving lifts** with carry physics;
+  three enemy types — SKARL (shooter), BRUTE (advancing melee), SENTRY (fires
+  then ducks into cover); **procedural audio** (synthesized, no asset files).
+  Verified by `--selftest` + headless captures, incl. `test_lift`/`test_bomb`
+  rooms. (Thrown bombs and shotgun-upgrade *pickup variety* beyond u/U, plus
+  flanking AI, remain for later polish.)
 - **M3 — NPCs & narrative.** Freed Aurithi, hints/passwords, the Daystone-shard
   gate, area transitions, the four areas end-to-end.
 - **M4 — Polish.** Original sprite art over the primitives, music, menus,

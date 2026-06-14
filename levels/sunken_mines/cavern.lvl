@@ -1,9 +1,11 @@
 @area Sunken Mines
 @room cavern
-; A wider gallery: two guards, a captive Aurithi who shares ammo, a Daystone
-; shard, and a bomb. West door back to the shaft, east door down to the depths.
+; A wider gallery: guards, a captive Aurithi, a bomb and shard on the floor, and
+; a lift rising to a ledge - ride it up for a speed upgrade, then bomb the cracked
+; wall for a power upgrade. West door to the shaft, east door down to the depths.
 @door 0 shaft 1
 @door 1 depths 0
+@lift 30 15 2 v 4 4
 ########################################
 #......................................#
 #......................................#
@@ -13,12 +15,12 @@
 #......................................#
 #......................................#
 #......................................#
+#..................................x...#
+#................................u.xU..#
+#...............................######.#
 #......................................#
 #......................................#
-#......................................#
-#......................................#
-#......................................#
-#0..S.n...g.........*.....g...B.......1#
+#0..S.n...g....B..*.....g...a.........1#
 ########################################
 ########################################
 ########################################
