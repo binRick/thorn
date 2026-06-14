@@ -10,6 +10,8 @@ area — magazine/reserve ammo with auto-reload, shotgun power/speed upgrades,
 placed bombs that blow cracked walls, moving lifts that carry you, three enemy
 types (shooter / advancing brute / cover-using sentry), and procedural audio.
 Built on the M1 room graph (doors, keys/locked doors, lever→bridge, checkpoints).
+Actors and tiles now render as **original, code-generated pixel-art sprites**
+(no external assets); `./build/thorn --dumpsprites` exports the sheet to a PNG.
 
 ## Run
 

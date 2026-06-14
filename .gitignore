@@ -8,6 +8,7 @@ vendor/raylib-src/
 # Instrumentation logs and captures
 *.log
 thorn-shot*.png
+thorn-sprites.png
 
 # macOS
 .DS_Store

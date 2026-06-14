@@ -263,10 +263,13 @@ is an optional objective.
 - Two draw planes: a **background** pass (recessed/darker tiles, shadow alcoves)
   and a **foreground** pass (solids, actors, projectiles). Cover visibly tints the
   actor and shifts it into the background plane.
-- Actors are drawn from primitives (torso/head/limbs/gun-barrel) so **state and
-  facing are legible at a glance** — essential for debugging by eye. Swapping in
-  sprite atlases later is a draw-function change, not an architecture change.
-- HUD: HP bar, ammo, selected item, area/room name, and current player state.
+- Actors and tiles render as **original pixel-art sprites generated in code** at
+  startup (M2 polish): actor bitmaps are tiny in-source ASCII art (one hero shape
+  + one guard shape, tinted per enemy type) and tiles are synthesized
+  procedurally — no external/copyrighted assets. `--dumpsprites` exports the sheet
+  to a PNG for review. A primitive-shape fallback (`DrawFigure`) remains for when
+  textures aren't loaded. Swapping in richer atlases is a draw-function change.
+- HUD: HP bar, shells (mag/reserve), items, gun upgrades, area/room name, state.
 
 ### 5.5 Audio (M2)
 - raylib audio: shotgun fire/pump, footsteps, hit/death, ambient per area, lever
@@ -376,7 +379,8 @@ last few discrete events, so the live view and the log always agree.
 `--selftest` (validate the room graph and exit), `--room PATH` / `--spawn ID`
 (boot straight into a specific room/entrance), `--no-enemies`, `--god`, `--demo`
 (scripted attract/auto-play), `--frames N` (run N frames then quit), `--shot N`
-(screenshot at frame N), `--rate N` (snapshot cadence), plus in-game toggles
+(screenshot at frame N), `--dumpsprites` (export the generated sprite sheet to a
+PNG and exit), `--rate N` (snapshot cadence), plus in-game toggles
 `G` god, `H` hitboxes, `N` no-enemies, `R` respawn. Toggles emit a `mode` event
 so the log records the exact harness.
 
@@ -418,8 +422,10 @@ incremental and instant when nothing changed.
   flanking AI, remain for later polish.)
 - **M3 — NPCs & narrative.** Freed Aurithi, hints/passwords, the Daystone-shard
   gate, area transitions, the four areas end-to-end.
-- **M4 — Polish.** Original sprite art over the primitives, music, menus,
-  options, Linux/Web/iOS build parity with the sibling projects.
+- **M4 — Polish (started).** Original pixel-art sprites for actors/tiles are in
+  (generated in code; primitives remain as fallback); still to do: richer/larger
+  sprite sets and animation, music, menus, options, and Linux/Web/iOS build
+  parity with the sibling projects.
 
 ## 9. Risks & open questions
 - **Climb feel** is the hardest thing to make non-fiddly without a jump button;

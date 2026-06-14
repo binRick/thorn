@@ -660,6 +660,116 @@ static void EmitState(void){
     fprintf(g_dbg,"]}\n"); fflush(g_dbg);
 }
 
+// ---- Sprites (original pixel art, generated in code; no asset files) ---------
+// Actor bitmaps: '.'=clear o=outline f=skin e=eye b/d=cloth (tinted per actor)
+// m/n=gun metal k=boot. Rows are padded with clear if short.
+static const char *SPR_HERO_IDLE[] = {
+    "....oooo......","...obbbbo.....","...obbbbo.....","...obfffeo....",
+    "...offffo.....","....obbo......","..obbbbbbo....",".obbddddbbo...",
+    ".obbddddbbo...",".obbddddbbo...",".obbddddbmmmmn",".obbddddbo....",
+    ".obbddddbo....",".obddddddo....",".obbkkbbo.....",".obb..bbo.....",
+    ".obb..bbo.....",".odd..ddo.....",".odd..ddo.....",".okk..kko.....",
+    ".okkk.kkko....","..ooo..ooo....",
+};
+static const char *SPR_HERO_WALK[] = {
+    "....oooo......","...obbbbo.....","...obbbbo.....","...obfffeo....",
+    "...offffo.....","....obbo......","..obbbbbbo....",".obbddddbbo...",
+    ".obbddddbbo...",".obbddddbbo...",".obbddddbmmmmn",".obbddddbo....",
+    ".obbddddbo....",".obddddddo....",".obbkkbbo.....","..obbkbbo....",
+    "..obb.bbbo...","..odd..dddo..","..okk...kko..",".okk....kko..",
+    ".okkk..okk...","..ooo...oo....",
+};
+static const char *SPR_GUARD[] = {
+    "...oooooo.....","..obbbbbbo....","..obddddbo....","..obdeedbo....",
+    "..obddddbo....","...obbbbo.....","..obbbbbbo....",".obddddddbo...",
+    ".obddddddbmmmn",".obddddddbo...",".obddddddbo...",".obddddddbo...",
+    ".obbddddbbo...",".obb..bbo.....",".obb..bbo.....",".obb..bbo.....",
+    ".odd..ddo.....",".odd..ddo.....",".okk..kko.....",".okkk.kkko....",
+    "..ooo..ooo....","..............",
+};
+#define SPR_ROWS 22
+
+static Color SprPal(char k, Color cloth, Color clothDark){
+    switch(k){
+        case 'o': return (Color){18,16,24,255};
+        case 'f': return (Color){214,170,138,255};
+        case 'e': return (Color){95,205,235,255};
+        case 'b': return cloth;
+        case 'd': return clothDark;
+        case 'm': return (Color){86,90,104,255};
+        case 'n': return (Color){46,50,60,255};
+        case 'k': return (Color){58,44,36,255};
+        default:  return (Color){0,0,0,0};
+    }
+}
+static Image ImgFromAscii(const char**rows,int h,Color cloth,Color clothDark){
+    int w=(int)strlen(rows[0]); Image im=GenImageColor(w,h,(Color){0,0,0,0});
+    for(int y=0;y<h;y++){ const char*R=rows[y]; int rw=(int)strlen(R);
+        for(int x=0;x<w&&x<rw;x++){ Color c=SprPal(R[x],cloth,clothDark); if(c.a) ImageDrawPixel(&im,x,y,c); } }
+    return im;
+}
+static int iclamp(int v,int a,int b){ return v<a?a:(v>b?b:v); }
+static Image ImgStone(Color base,int cracked){
+    int n=TILE; Image im=GenImageColor(n,n,base);
+    for(int y=0;y<n;y++) for(int x=0;x<n;x++){
+        int v=((x*5+y*9+((x^y)*3))%13)-6, top=(y<3)?16:0, bot=(y>n-3)?-16:0, s=v+top+bot;
+        ImageDrawPixel(&im,x,y,(Color){(unsigned char)iclamp(base.r+s,0,255),(unsigned char)iclamp(base.g+s,0,255),(unsigned char)iclamp(base.b+s,0,255),255});
+    }
+    ImageDrawRectangleLines(&im,(Rectangle){0,0,n,n},1,(Color){0,0,0,50});
+    if(cracked){ ImageDrawLine(&im,5,2,11,13,(Color){18,14,10,255}); ImageDrawLine(&im,11,3,7,15,(Color){18,14,10,255}); ImageDrawLine(&im,4,9,13,7,(Color){18,14,10,200}); }
+    return im;
+}
+static Image ImgBridge(void){
+    int n=TILE; Image im=GenImageColor(n,n,(Color){120,86,50,255});
+    for(int x=0;x<n;x+=6) ImageDrawLine(&im,x,0,x,n,(Color){80,56,32,255});
+    ImageDrawRectangle(&im,0,0,n,3,(Color){152,116,72,255});
+    return im;
+}
+
+static Texture2D g_tHeroIdle,g_tHeroWalk,g_tEnemy[3],g_tStone,g_tCrack,g_tBridge;
+static int g_sprites=0;
+static void InitSprites(void){
+    Color pb={92,150,235,255},pd={50,92,168,255};
+    Color e0={200,72,72,255},e0d={138,40,40,255}, e1={150,58,58,255},e1d={92,30,30,255}, e2={152,84,186,255},e2d={96,48,122,255};
+    Image im;
+    im=ImgFromAscii(SPR_HERO_IDLE,SPR_ROWS,pb,pd); g_tHeroIdle=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_HERO_WALK,SPR_ROWS,pb,pd); g_tHeroWalk=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e0,e0d); g_tEnemy[0]=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e1,e1d); g_tEnemy[1]=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e2,e2d); g_tEnemy[2]=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgStone((Color){58,54,64,255},0); g_tStone=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgStone((Color){78,64,52,255},1); g_tCrack=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgBridge(); g_tBridge=LoadTextureFromImage(im); UnloadImage(im);
+    g_sprites=1;
+}
+// Export the sprites to a PNG (no window needed) for visual review.
+static int DumpSprites(void){
+    Color pb={92,150,235,255},pd={50,92,168,255},e0={200,72,72,255},e0d={138,40,40,255},
+          e1={150,58,58,255},e1d={92,30,30,255},e2={152,84,186,255},e2d={96,48,122,255};
+    Image a[8]; int n=0;
+    a[n++]=ImgFromAscii(SPR_HERO_IDLE,SPR_ROWS,pb,pd);
+    a[n++]=ImgFromAscii(SPR_HERO_WALK,SPR_ROWS,pb,pd);
+    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,e0,e0d);
+    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,e1,e1d);
+    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,e2,e2d);
+    a[n++]=ImgStone((Color){58,54,64,255},0);
+    a[n++]=ImgStone((Color){78,64,52,255},1);
+    a[n++]=ImgBridge();
+    Image sheet=GenImageColor(800,140,(Color){28,28,38,255});
+    int x=12, sc=4;
+    for(int i=0;i<n;i++){ ImageDraw(&sheet,a[i],(Rectangle){0,0,(float)a[i].width,(float)a[i].height},(Rectangle){(float)x,18,(float)a[i].width*sc,(float)a[i].height*sc},WHITE); x+=a[i].width*sc+12; UnloadImage(a[i]); }
+    ExportImage(sheet,"thorn-sprites.png"); UnloadImage(sheet);
+    printf("wrote thorn-sprites.png\n"); return 0;
+}
+// Draw an actor texture into AABB (ax,ay,aw,ah), feet-aligned, flipped by face.
+static void DrawActorTex(Texture2D t,float ax,float ay,float aw,float ah,int face,float alpha,int flash){
+    float scale=ah/(float)t.height, dw=t.width*scale;
+    Rectangle src={0,0,(float)(face>0?t.width:-t.width),(float)t.height};
+    Rectangle dst={ax+aw*0.5f-dw*0.5f, ay+ah-(t.height*scale), dw, t.height*scale};
+    DrawTexturePro(t,src,dst,(Vector2){0,0},0,(Color){255,255,255,(unsigned char)(alpha*255)});
+    if(flash) DrawRectangleRec(dst,(Color){255,255,255,150});
+}
+
 // ---- Rendering --------------------------------------------------------------
 static void DrawFigure(float x,float y,float w,float h,int face,Color body,int firing,int dir,int dim){
     Color head=(Color){body.r,body.g,body.b,255};
@@ -681,17 +791,18 @@ static void DrawWorld(void){
         DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){14,16,26,255});
         DrawRectangleLinesEx((Rectangle){c*TILE+3,r*TILE+3,TILE-6,TILE-6},2,(Color){40,44,70,255});
     }
-    for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_tiles[r][c]=='#'){
-        DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){58,54,64,255});
-        DrawRectangle(c*TILE,r*TILE,TILE,4,(Color){92,86,104,255});
+    for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_tiles[r][c]=='#' && !g_crack[r][c]){
+        if(g_sprites) DrawTexture(g_tStone,c*TILE,r*TILE,WHITE);
+        else { DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){58,54,64,255}); DrawRectangle(c*TILE,r*TILE,TILE,4,(Color){92,86,104,255}); }
     }
     for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_crack[r][c]){   // cracked walls read as breakable
-        DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){78,64,52,255});
-        DrawLineEx((Vector2){c*TILE+7,r*TILE+3},(Vector2){c*TILE+15,r*TILE+TILE-5},2,(Color){28,22,18,255});
-        DrawLineEx((Vector2){c*TILE+22,r*TILE+5},(Vector2){c*TILE+13,r*TILE+19},2,(Color){28,22,18,255});
+        if(g_sprites) DrawTexture(g_tCrack,c*TILE,r*TILE,WHITE);
+        else { DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){78,64,52,255});
+            DrawLineEx((Vector2){c*TILE+7,r*TILE+3},(Vector2){c*TILE+15,r*TILE+TILE-5},2,(Color){28,22,18,255});
+            DrawLineEx((Vector2){c*TILE+22,r*TILE+5},(Vector2){c*TILE+13,r*TILE+19},2,(Color){28,22,18,255}); }
     }
     for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_bridge[r][c]){
-        if(g_bridgeOn){ DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){120,86,50,255}); DrawRectangle(c*TILE,r*TILE,TILE,4,(Color){160,120,70,255}); }
+        if(g_bridgeOn){ if(g_sprites) DrawTexture(g_tBridge,c*TILE,r*TILE,WHITE); else { DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){120,86,50,255}); DrawRectangle(c*TILE,r*TILE,TILE,4,(Color){160,120,70,255}); } }
         else DrawRectangleLinesEx((Rectangle){c*TILE+2,r*TILE+2,TILE-4,TILE-4},1,(Color){90,66,40,170}); // ghost
     }
     for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_spike[r][c])
@@ -716,15 +827,18 @@ static void DrawWorld(void){
     }
     for(int i=0;i<g_npcN;i++){ Npc*n=&g_npc[i]; float x=n->c*TILE+(TILE-EW)/2,y=(n->r+1)*TILE-EH; DrawFigure(x,y,EW,EH,1,n->freed?(Color){120,200,140,255}:(Color){150,150,160,255},0,1,0); }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive){ DrawRectangle((int)e->x,(int)(e->y+EH-8),(int)EW,8,(Color){90,30,30,200}); continue; }
-        Color col = e->hitFlash>0?(Color){255,255,255,255} : e->type==1?(Color){150,55,55,255} : e->type==2?(Color){150,80,185,255} : (Color){200,70,70,255};
-        DrawFigure(e->x,e->y,EW,EH,e->face,col,0,e->face,e->inCover);   // dim while ducked into cover
+        if(g_sprites){ float sc=e->type==1?1.14f:1.0f, eh=EH*sc; DrawActorTex(g_tEnemy[e->type],e->x,e->y+EH-eh,EW,eh,e->face,e->inCover?0.45f:1.0f,e->hitFlash>0); }
+        else { Color col = e->hitFlash>0?(Color){255,255,255,255} : e->type==1?(Color){150,55,55,255} : e->type==2?(Color){150,80,185,255} : (Color){200,70,70,255}; DrawFigure(e->x,e->y,EW,EH,e->face,col,0,e->face,e->inCover); }
         if(!e->inCover){ int mh=e->type==1?110:e->type==2?45:E_HP; DrawRectangle((int)e->x,(int)e->y-7,(int)EW,4,(Color){40,40,40,255}); DrawRectangle((int)e->x,(int)e->y-7,(int)(EW*e->hp/(float)mh),4,(Color){90,220,90,255}); }
     }
     for(int i=0;i<MAXSHOT;i++){ Shot*s=&g_shot[i]; if(s->age<0||s->age>0.09f) continue; Color c=s->owner?(Color){255,150,60,255}:(Color){120,230,255,255}; DrawLineEx((Vector2){s->x1,s->y1},(Vector2){s->x2,s->y2},3,c); }
     for(int i=0;i<MAXBOMB;i++) if(g_bomb[i].active){ Bomb*b=&g_bomb[i]; DrawCircle((int)b->x,(int)b->y-6,9,(Color){40,40,46,255}); int blink=((int)(b->fuse*8))&1; DrawCircle((int)b->x,(int)b->y-16,3,blink?(Color){255,80,60,255}:(Color){110,40,30,255}); }
     if(g_boomT>0){ float k=1.0f-(g_boomT/0.35f); float rad=BOMB_RADIUS*k; DrawCircleLines((int)g_boomX,(int)g_boomY,rad,(Color){255,180,60,(unsigned char)(220*(1-k))}); DrawCircle((int)g_boomX,(int)g_boomY,rad*0.5f,(Color){255,140,40,(unsigned char)(120*(1-k))}); }
-    if(!P.dead){ Color pc = P.iframes>0?(Color){255,255,255,255}:(Color){90,150,235,255}; DrawFigure(P.x,P.y,PW,PH,P.face,pc,P.muzzle>0,P.muzzleDir,P.inCover); }
-    else DrawRectangle((int)P.x,(int)(P.y+PH-8),(int)PW,8,(Color){120,40,40,220});
+    if(!P.dead){
+        if(g_sprites){ float a=P.inCover?0.5f:(P.iframes>0?0.5f:1.0f); int moving=fabsf(P.vx)>5; Texture2D ht=(moving && ((int)(GetTime()*8)&1))?g_tHeroWalk:g_tHeroIdle; DrawActorTex(ht,P.x,P.y,PW,PH,P.face,a,0);
+            if(P.muzzle>0) DrawCircle((int)(P.muzzleDir>0?P.x+PW+6:P.x-6),(int)(P.y+PH*0.42f+2),8,(Color){255,230,120,235}); }
+        else { Color pc = P.iframes>0?(Color){255,255,255,255}:(Color){90,150,235,255}; DrawFigure(P.x,P.y,PW,PH,P.face,pc,P.muzzle>0,P.muzzleDir,P.inCover); }
+    } else DrawRectangle((int)P.x,(int)(P.y+PH-8),(int)PW,8,(Color){120,40,40,220});
     if(g_hitboxes){ DrawRectangleLinesEx((Rectangle){P.x,P.y,PW,PH},1,GREEN); for(int i=0;i<g_enN;i++) if(g_en[i].alive) DrawRectangleLinesEx((Rectangle){g_en[i].x,g_en[i].y,EW,EH},1,RED); }
     EndMode2D();
 }
@@ -814,6 +928,7 @@ static int RunSelfTest(void){
 
 // ---- main -------------------------------------------------------------------
 int main(int argc,char**argv){
+    int dump=0;
     for(int i=1;i<argc;i++){
         if(!strcmp(argv[i],"--debug")) g_debug=1;
         else if(!strcmp(argv[i],"--no-enemies")) g_noEnemies=1;
@@ -826,7 +941,9 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--rate")&&i+1<argc) g_rate=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--frames")&&i+1<argc) g_maxFrames=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--shot")&&i+1<argc) g_shotFrame=atoi(argv[++i]);
+        else if(!strcmp(argv[i],"--dumpsprites")) dump=1;
     }
+    if(dump) return DumpSprites();   // export thorn-sprites.png and exit (no window)
     if(g_debug){ g_dbg=fopen("thorn-debug.log","w"); if(!g_dbg) g_dbg=stderr; }
     for(int i=0;i<MAXSHOT;i++) g_shot[i].age=-1;
 
@@ -836,17 +953,18 @@ int main(int argc,char**argv){
         SetTraceLogLevel(LOG_WARNING);
         SetConfigFlags(FLAG_MSAA_4X_HINT);
         InitWindow(SCREEN_W,SCREEN_H,"Thorn - cinematic platformer (raylib " THORN_RAYLIB ")");
-        SetTargetFPS(120);
-        InitAudio();
-        if(!IsWindowReady()){
+        if(!IsWindowReady()){   // no display (SSH/CI/sandbox): bail before touching the GL context
             DebugLog("error","\"msg\":\"window-init-failed\"");
             fprintf(stderr,"Thorn: display unavailable (window init failed). Use './build/thorn --headless --frames N'.\n");
             if(g_dbg && g_dbg!=stderr) fclose(g_dbg);
             return 1;
         }
+        SetTargetFPS(120);
+        InitAudio();      // needs a live device; safe no-op if it fails to init
+        InitSprites();    // uploads generated textures; needs the GL context above
     }
 
-    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.3.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
+    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.4.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
     DebugLog("window","\"w\":%d,\"h\":%d,\"monitor\":%d",SCREEN_W,SCREEN_H,g_headless?0:GetCurrentMonitor());
 
     // New game: stats, then the first room (LoadRoom logs its own "level" event).
