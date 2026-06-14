@@ -1,0 +1,13 @@
+# Build artifacts
+build/
+
+# Vendored raylib (rebuilt on demand via `make raylib6` / run.sh)
+vendor/raylib/
+vendor/raylib-src/
+
+# Instrumentation logs and captures
+*.log
+thorn-shot*.png
+
+# macOS
+.DS_Store
