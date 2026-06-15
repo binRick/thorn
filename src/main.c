@@ -147,6 +147,10 @@ typedef struct { float x,y,vx,vy,life,max,size; unsigned char r,g,b; int add,gra
 static Part g_part[MAXPART]; static int g_partHead=0;
 static int   g_fx=1; static float g_shake=0;
 static Texture2D g_tLight, g_tVign;   // soft radial light + vignette (built in InitSprites)
+typedef struct { float x,y,life; char s[16]; } FloatTxt;   // rising pickup labels
+#define MAXFLOAT 16
+static FloatTxt g_float[MAXFLOAT]; static int g_floatHead=0;
+static void FloatSpawn(float x,float y,const char*s){ if(!g_fx||g_headless) return; FloatTxt*f=&g_float[g_floatHead]; g_floatHead=(g_floatHead+1)%MAXFLOAT; f->x=x; f->y=y; f->life=1.1f; snprintf(f->s,sizeof f->s,"%s",s); }
 static void Emit(float x,float y,int n,float spd,float life,float size,Color c,int add,int grav){
     if(!g_fx||g_headless) return;
     for(int k=0;k<n;k++){ Part*p=&g_part[g_partHead]; g_partHead=(g_partHead+1)%MAXPART;
@@ -160,6 +164,7 @@ static void UpdateParticles(void){
     if(g_shake>0){ g_shake-=DT*38.0f; if(g_shake<0) g_shake=0; }
     for(int i=0;i<MAXPART;i++){ Part*p=&g_part[i]; if(p->life<=0) continue;
         p->life-=DT; if(p->grav) p->vy+=900.0f*DT; p->x+=p->vx*DT; p->y+=p->vy*DT; p->vx*=0.985f; }
+    for(int i=0;i<MAXFLOAT;i++) if(g_float[i].life>0){ g_float[i].life-=DT*1.25f; g_float[i].y-=22.0f*DT; }
 }
 
 // ---- World grid -------------------------------------------------------------
@@ -689,7 +694,7 @@ static void UpdatePlayer(Input in){
                          case 'u': P.gunSpd++; nm="speed upgrade"; break;
                          case 'U': P.gunPow++; nm="power upgrade"; break; }
         SndPlay(p->kind=='u'||p->kind=='U'?SND_UPGRADE:SND_PICKUP);
-        DebugLog("pickup","\"item\":\"%s\",\"x\":%d,\"y\":%d",nm,p->c*TILE,p->r*TILE); Ev("got %s",nm);
+        DebugLog("pickup","\"item\":\"%s\",\"x\":%d,\"y\":%d",nm,p->c*TILE,p->r*TILE); Ev("got %s",nm); FloatSpawn(p->c*TILE+TILE*0.5f,(float)(p->r*TILE),TextFormat("+%s",nm));
     } }
     for(int i=0;i<g_cpN;i++){ if(!g_cps[i].hit && g_cps[i].c==ccol && g_cps[i].r==feetRow){ g_cps[i].hit=1;
         snprintf(g_cpPath,sizeof g_cpPath,"%s",g_roomPath); g_cpX=P.x; g_cpY=P.y; g_cpFace=P.face;
@@ -1042,6 +1047,7 @@ static void DrawParticles(void){
         DrawRectangle((int)(p->x-s),(int)(p->y-s),(int)(s*2+1),(int)(s*2+1),(Color){p->r,p->g,p->b,(unsigned char)(a*255)}); }
     EndBlendMode();
 }
+static void DrawFloats(void){ for(int i=0;i<MAXFLOAT;i++){ FloatTxt*f=&g_float[i]; if(f->life<=0) continue; unsigned char a=(unsigned char)((f->life>1?1:f->life)*255); int w=MeasureText(f->s,12); DrawText(f->s,(int)(f->x-w/2),(int)f->y,12,(Color){240,235,180,a}); } }
 static void Light(float wx,float wy,float rad,Color c){ DrawTexturePro(g_tLight,(Rectangle){0,0,128,128},(Rectangle){wx-g_cam.x-rad,wy-g_cam.y-rad,rad*2,rad*2},(Vector2){0,0},0,c); }
 static void DrawLighting(void){
     Color t=AreaTint();
@@ -1123,7 +1129,7 @@ static void DrawWorld(void){
         if(P.meleeT>0){ float mx=P.face>0?P.x+PW:P.x; DrawLineEx((Vector2){mx,P.y+PH*0.30f},(Vector2){mx+P.face*24,P.y+PH*0.55f},3,(Color){235,240,255,225}); DrawLineEx((Vector2){mx,P.y+PH*0.58f},(Vector2){mx+P.face*22,P.y+PH*0.36f},2,(Color){200,220,255,150}); }   // knife slash
     } else DrawRectangle((int)P.x,(int)(P.y+PH-8),(int)PW,8,(Color){120,40,40,220});
     if(g_hitboxes){ DrawRectangleLinesEx((Rectangle){P.x,P.y,PW,PH},1,GREEN); for(int i=0;i<g_enN;i++) if(g_en[i].alive) DrawRectangleLinesEx((Rectangle){g_en[i].x,g_en[i].y,EW,EH},1,RED); }
-    if(g_fx) DrawParticles();   // world-space, on top of actors
+    if(g_fx){ DrawParticles(); DrawFloats(); }   // world-space, on top of actors
     EndMode2D();
     if(g_fx) DrawLighting();    // screen-space atmosphere
 }
