@@ -201,6 +201,8 @@ static char      g_npcGift[MAXNPC][40];   // per-NPC gift ("ammo"/"key"/"bomb"/"
 static struct { char color[12]; int count; } g_keys[MAXKEY]; static int g_keyN=0;
 
 static char g_areaName[48]="Sunken Mines", g_roomName[48]="-", g_roomPath[160]="";
+static float g_areaCardT=0;                       // "now entering <area>" banner timer
+static char g_areaSeen[8][48]; static int g_areaSeenN=0;   // areas already announced this game
 static char g_cpPath[160]=""; static float g_cpX=0,g_cpY=0; static int g_cpFace=1;   // checkpoint
 static int  g_pendActive=0, g_pendSpawn=-1; static char g_pendTarget[48]="";          // deferred door
 static int  g_areaClear=0, g_victory=0;
@@ -424,6 +426,14 @@ static void LoadRoom(const char*path,int spawnDoor,int setCheckpoint){
     if(setCheckpoint){ snprintf(g_cpPath,sizeof g_cpPath,"%s",g_roomPath); g_cpX=P.x; g_cpY=P.y; g_cpFace=P.face; }
     DebugLog("level","\"area\":\"%s\",\"room\":\"%s\",\"w\":%d,\"h\":%d,\"enemies\":%d,\"doors\":%d,\"pickups\":%d,\"levers\":%d",
              JStr(g_areaName),JStr(g_roomName),g_W,g_H,g_enN,g_doorN,g_pkN,g_leverN);
+    {   // first time in this area this game -> announce it with a title card
+        int seen=0; for(int i=0;i<g_areaSeenN;i++) if(!strcmp(g_areaSeen[i],g_areaName)){ seen=1; break; }
+        if(!seen){
+            if(g_areaSeenN<8) snprintf(g_areaSeen[g_areaSeenN++],48,"%s",g_areaName);
+            g_areaCardT=2.8f;
+            DebugLog("areacard","\"area\":\"%s\"",JStr(g_areaName));
+        }
+    }
     if(g_curPassword[0]){   // area-entrance room: save progress + show the password
         FILE*sf=fopen("thorn-save.txt","w"); if(sf){ fprintf(sf,"%s\n%s\n",g_curPassword,g_roomPath); fclose(sf); }
         Msg(3.5f,"PASSWORD: %s  (progress saved)",g_curPassword);
@@ -440,6 +450,7 @@ static void RespawnAtCheckpoint(void){
 static void NewGame(void){
     P.hp=P_HP_MAX; P.mag=MAG_MAX; P.reserve=(g_diff==0?18:g_diff==2?8:RESERVE_START); P.gunPow=0; P.gunSpd=0; P.reloadT=0;
     P.bombs=1; P.shards=0; P.keys=0; g_keyN=0; g_collN=0; g_won=0; g_areaClear=0; g_victory=0;
+    g_areaSeenN=0; g_areaCardT=0;   // re-announce areas for a fresh playthrough
     LoadRoom(g_roomStart,g_startSpawn,1);
 }
 static void ContinueGame(void){   // resume from the saved area entrance (password system)
@@ -1152,6 +1163,25 @@ static void DrawWorld(void){
 
 static void Bar(int x,int y,int w,int h,float frac,Color fg){ DrawRectangle(x,y,w,h,(Color){30,30,36,220}); DrawRectangle(x,y,(int)(w*clampf(frac,0,1)),h,fg); DrawRectangleLines(x,y,w,h,(Color){10,10,12,255}); }
 
+// "NOW ENTERING <area>" banner — fades in/out over its lifetime (cosmetic).
+static void DrawAreaCard(void){
+    if(g_areaCardT<=0) return;
+    float a=1.0f;
+    if(g_areaCardT>2.4f) a=(2.8f-g_areaCardT)/0.4f;        // fade in
+    else if(g_areaCardT<0.6f) a=g_areaCardT/0.6f;          // fade out
+    if(a<0)a=0; if(a>1)a=1;
+    unsigned char A=(unsigned char)(a*255);
+    int cy=(int)(SCREEN_H*0.34f);
+    DrawRectangle(0,cy-44,SCREEN_W,88,(Color){0,0,0,(unsigned char)(a*150)});
+    Color gold={210,185,120,A};
+    DrawRectangle(0,cy-44,SCREEN_W,2,gold);
+    DrawRectangle(0,cy+42,SCREEN_W,2,gold);
+    const char*kick="N O W   E N T E R I N G";
+    int kw=MeasureText(kick,16); DrawText(kick,SCREEN_W/2-kw/2,cy-32,16,(Color){150,160,180,A});
+    int nw=MeasureText(g_areaName,46);
+    DrawText(g_areaName,SCREEN_W/2-nw/2+2,cy-8+2,46,(Color){0,0,0,(unsigned char)(a*160)});   // drop shadow
+    DrawText(g_areaName,SCREEN_W/2-nw/2,cy-8,46,(Color){235,225,200,A});
+}
 static void DrawHUD(void){
     if(P.hurtT>0 && P.hp>0) DrawRectangle(0,0,SCREEN_W,SCREEN_H,(Color){200,40,40,(unsigned char)(P.hurtT/0.25f*110)});   // damage flash
     if(g_sprites && P.hp>0 && P.hp<30 && !P.dead){ float p=0.45f+0.45f*sinf((float)GetTime()*6.0f);   // low-HP danger pulse
@@ -1366,6 +1396,7 @@ int main(int argc,char**argv){
         Input in = g_demo?DemoInput():KeyInput();
 
         float ft=GetFrameTime(); if(ft>0.05f) ft=0.05f;
+        if(g_areaCardT>0) g_areaCardT-=ft;
         if(!g_paused && !g_won){
             acc+=ft; int steps=0;
             while(acc>=DT && steps<5){
@@ -1380,7 +1411,7 @@ int main(int argc,char**argv){
 
         BeginDrawing();
         ClearBackground((Color){20,22,30,255});
-        DrawWorld(); DrawHUD(); DrawOverlay();
+        DrawWorld(); DrawHUD(); DrawAreaCard(); DrawOverlay();
         EndDrawing();
 
         if(g_shotFrame && g_frame>=g_shotFrame && !shotDone){ TakeScreenshot("thorn-shot.png"); shotDone=1; DebugLog("shot","\"file\":\"thorn-shot.png\",\"frame\":%ld",g_frame); }
