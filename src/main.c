@@ -717,51 +717,62 @@ static void EmitState(void){
 }
 
 // ---- Sprites (original pixel art, generated in code; no asset files) ---------
-// Actor bitmaps: '.'=clear o=outline f=skin e=eye b/d=cloth (tinted per actor)
-// m/n=gun metal k=boot. Rows are padded with clear if short.
+// 16x26 actor bitmaps with multi-tone shading (light source upper-left).
+//   o=outline  B/b/d/D = cloth light/mid/dark/darkest (tinted per actor)
+//   m/M/n = gun metal mid/light/dark   y=visor glow   k=boot   .=clear
 static const char *SPR_HERO_IDLE[] = {
-    "....oooo......","...obbbbo.....","...obbbbo.....","...obfffeo....",
-    "...offffo.....","....obbo......","..obbbbbbo....",".obbddddbbo...",
-    ".obbddddbbo...",".obbddddbbo...",".obbddddbmmmmn",".obbddddbo....",
-    ".obbddddbo....",".obddddddo....",".obbkkbbo.....",".obb..bbo.....",
-    ".obb..bbo.....",".odd..ddo.....",".odd..ddo.....",".okk..kko.....",
-    ".okkk.kkko....","..ooo..ooo....",
+    "......oooooo........",".....oBBBBBBo.......",".....oBbbbbddo......",".....obbbbbddo......",
+    ".....oyyyyyddo......",".....obbbbbddo......","......obbbddo.......",".......obbo.........",
+    "...oBBBBbbbdddo.....","..oBBbbbbbbbdddo....","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
+    "..obBbbDDDbbddmMMMn.","..obBbbbbbbbddmMMMn.","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
+    "..obbbbbbbbbddo.....","...obDDDDDDDddo.....","...obbbo.obbbo......","...oBbdo.oBbdo......",
+    "...obbdo.obbdo......","...obddo.obddo......","...obddo.obddo......","...okkko.okkko......",
+    "..okkko...okkko.....","..oooo.....oooo.....","...................","...................",
 };
 static const char *SPR_HERO_WALK[] = {
-    "....oooo......","...obbbbo.....","...obbbbo.....","...obfffeo....",
-    "...offffo.....","....obbo......","..obbbbbbo....",".obbddddbbo...",
-    ".obbddddbbo...",".obbddddbbo...",".obbddddbmmmmn",".obbddddbo....",
-    ".obbddddbo....",".obddddddo....",".obbkkbbo.....","..obbkbbo....",
-    "..obb.bbbo...","..odd..dddo..","..okk...kko..",".okk....kko..",
-    ".okkk..okk...","..ooo...oo....",
+    "......oooooo........",".....oBBBBBBo.......",".....oBbbbbddo......",".....obbbbbddo......",
+    ".....oyyyyyddo......",".....obbbbbddo......","......obbbddo.......",".......obbo.........",
+    "...oBBBBbbbdddo.....","..oBBbbbbbbbdddo....","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
+    "..obBbbDDDbbddmMMMn.","..obBbbbbbbbddmMMMn.","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
+    "..obbbbbbbbbddo.....","...obDDDDDDDddo.....","...obbbo..obbo......","...oBbdo..oBbo......",
+    "..obbdo....obbo.....","..obddo.....obdo....",".obddo......obdo....","okkko.......okko...",
+    "okko.........okko..","ooo...........ooo..","...................","...................",
 };
 static const char *SPR_GUARD[] = {
-    "...oooooo.....","..obbbbbbo....","..obddddbo....","..obdeedbo....",
-    "..obddddbo....","...obbbbo.....","..obbbbbbo....",".obddddddbo...",
-    ".obddddddbmmmn",".obddddddbo...",".obddddddbo...",".obddddddbo...",
-    ".obbddddbbo...",".obb..bbo.....",".obb..bbo.....",".obb..bbo.....",
-    ".odd..ddo.....",".odd..ddo.....",".okk..kko.....",".okkk.kkko....",
-    "..ooo..ooo....","..............",
+    "...oo...oo...oo.....","....oBBBBBBBdo......","...oBbbbbbbbddo.....","...obbbbbbbbddo.....",
+    "...oybbbybbbddo.....","...obbbbbbbbddo.....","....obbbbbbddo......","...oBBBBbbbdddo.....",
+    "..oBBbbbbbbbbdddo...","..obBbbDDDDbbdddo...","..obBbbbbbbbbddmMMMn","..obBbbDDDDbbddmMMMn",
+    "..obBbbbbbbbbdddo...","..obBbbDDDDbbdddo...","..obbbbbbbbbbddo....","...obDDDDDDDDddo....",
+    "...obbbbo.obbbbo....","...obbo....obbo.....","...obdo....obdo.....","...obdo....obdo.....",
+    "...obDo....obDo.....","...okko....okko.....","..okkko...okkko.....",".oooo......oooo....",
+    "...................","...................","...................","...................",
 };
-#define SPR_ROWS 22
+#define SPR_ROWS 28
 
-static Color SprPal(char k, Color cloth, Color clothDark){
+static Color shade(Color c,float f){   // self-contained (no iclamp dependency)
+    int r=(int)(c.r*f),g=(int)(c.g*f),b=(int)(c.b*f);
+    return (Color){ r>255?255:(unsigned char)r, g>255?255:(unsigned char)g, b>255?255:(unsigned char)b, 255 };
+}
+static Color SprPal(char k, Color cloth){
     switch(k){
-        case 'o': return (Color){18,16,24,255};
-        case 'f': return (Color){214,170,138,255};
-        case 'e': return (Color){95,205,235,255};
-        case 'b': return cloth;
-        case 'd': return clothDark;
-        case 'm': return (Color){86,90,104,255};
-        case 'n': return (Color){46,50,60,255};
-        case 'k': return (Color){58,44,36,255};
+        case 'o': return (Color){14,12,18,255};        // outline
+        case 'B': return shade(cloth,1.40f);           // cloth highlight
+        case 'b': return cloth;                         // cloth mid
+        case 'd': return shade(cloth,0.66f);           // cloth shadow
+        case 'D': return shade(cloth,0.42f);           // cloth deep shadow
+        case 'm': return (Color){120,126,140,255};     // gun mid
+        case 'M': return (Color){180,186,200,255};     // gun highlight
+        case 'n': return (Color){58,62,74,255};        // gun dark
+        case 'y': return (Color){120,228,236,255};     // visor glow
+        case 'k': return (Color){52,40,32,255};        // boot
+        case 'w': return (Color){240,240,245,255};     // spec highlight
         default:  return (Color){0,0,0,0};
     }
 }
-static Image ImgFromAscii(const char**rows,int h,Color cloth,Color clothDark){
+static Image ImgFromAscii(const char**rows,int h,Color cloth){
     int w=(int)strlen(rows[0]); Image im=GenImageColor(w,h,(Color){0,0,0,0});
     for(int y=0;y<h;y++){ const char*R=rows[y]; int rw=(int)strlen(R);
-        for(int x=0;x<w&&x<rw;x++){ Color c=SprPal(R[x],cloth,clothDark); if(c.a) ImageDrawPixel(&im,x,y,c); } }
+        for(int x=0;x<w&&x<rw;x++){ Color c=SprPal(R[x],cloth); if(c.a) ImageDrawPixel(&im,x,y,c); } }
     return im;
 }
 static int iclamp(int v,int a,int b){ return v<a?a:(v>b?b:v); }
@@ -785,16 +796,13 @@ static Image ImgBridge(void){
 static Texture2D g_tHeroIdle,g_tHeroWalk,g_tEnemy[4],g_tStone,g_tCrack,g_tBridge;
 static int g_sprites=0;
 static void InitSprites(void){
-    Color pb={92,150,235,255},pd={50,92,168,255};
-    Color e0={200,72,72,255},e0d={138,40,40,255}, e1={150,58,58,255},e1d={92,30,30,255}, e2={152,84,186,255},e2d={96,48,122,255};
     Image im;
-    im=ImgFromAscii(SPR_HERO_IDLE,SPR_ROWS,pb,pd); g_tHeroIdle=LoadTextureFromImage(im); UnloadImage(im);
-    im=ImgFromAscii(SPR_HERO_WALK,SPR_ROWS,pb,pd); g_tHeroWalk=LoadTextureFromImage(im); UnloadImage(im);
-    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e0,e0d); g_tEnemy[0]=LoadTextureFromImage(im); UnloadImage(im);
-    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e1,e1d); g_tEnemy[1]=LoadTextureFromImage(im); UnloadImage(im);
-    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e2,e2d); g_tEnemy[2]=LoadTextureFromImage(im); UnloadImage(im);
-    Color e3={130,36,58,255},e3d={74,18,34,255};   // MALDRAK: dark crimson (drawn large)
-    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e3,e3d); g_tEnemy[3]=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_HERO_IDLE,SPR_ROWS,(Color){92,150,235,255}); g_tHeroIdle=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_HERO_WALK,SPR_ROWS,(Color){92,150,235,255}); g_tHeroWalk=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){200,72,72,255});  g_tEnemy[0]=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){170,70,60,255});  g_tEnemy[1]=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){156,90,196,255}); g_tEnemy[2]=LoadTextureFromImage(im); UnloadImage(im);
+    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){164,44,64,255});  g_tEnemy[3]=LoadTextureFromImage(im); UnloadImage(im);   // MALDRAK
     im=ImgStone((Color){58,54,64,255},0); g_tStone=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgStone((Color){78,64,52,255},1); g_tCrack=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgBridge(); g_tBridge=LoadTextureFromImage(im); UnloadImage(im);
@@ -808,14 +816,12 @@ static void InitSprites(void){
 }
 // Export the sprites to a PNG (no window needed) for visual review.
 static int DumpSprites(void){
-    Color pb={92,150,235,255},pd={50,92,168,255},e0={200,72,72,255},e0d={138,40,40,255},
-          e1={150,58,58,255},e1d={92,30,30,255},e2={152,84,186,255},e2d={96,48,122,255};
-    Image a[8]; int n=0;
-    a[n++]=ImgFromAscii(SPR_HERO_IDLE,SPR_ROWS,pb,pd);
-    a[n++]=ImgFromAscii(SPR_HERO_WALK,SPR_ROWS,pb,pd);
-    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,e0,e0d);
-    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,e1,e1d);
-    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,e2,e2d);
+    Image a[9]; int n=0;
+    a[n++]=ImgFromAscii(SPR_HERO_IDLE,SPR_ROWS,(Color){92,150,235,255});
+    a[n++]=ImgFromAscii(SPR_HERO_WALK,SPR_ROWS,(Color){92,150,235,255});
+    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){200,72,72,255});
+    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){156,90,196,255});
+    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){164,44,64,255});
     a[n++]=ImgStone((Color){58,54,64,255},0);
     a[n++]=ImgStone((Color){78,64,52,255},1);
     a[n++]=ImgBridge();
