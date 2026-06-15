@@ -1107,6 +1107,9 @@ static void DrawWorld(void){
 static void Bar(int x,int y,int w,int h,float frac,Color fg){ DrawRectangle(x,y,w,h,(Color){30,30,36,220}); DrawRectangle(x,y,(int)(w*clampf(frac,0,1)),h,fg); DrawRectangleLines(x,y,w,h,(Color){10,10,12,255}); }
 
 static void DrawHUD(void){
+    if(P.hurtT>0 && P.hp>0) DrawRectangle(0,0,SCREEN_W,SCREEN_H,(Color){200,40,40,(unsigned char)(P.hurtT/0.25f*110)});   // damage flash
+    if(g_sprites && P.hp>0 && P.hp<30 && !P.dead){ float p=0.45f+0.45f*sinf((float)GetTime()*6.0f);   // low-HP danger pulse
+        DrawTexturePro(g_tVign,(Rectangle){0,0,(float)g_tVign.width,(float)g_tVign.height},(Rectangle){0,0,SCREEN_W,SCREEN_H},(Vector2){0,0},0,(Color){200,30,30,(unsigned char)(p*120)}); }
     DrawRectangle(0,0,SCREEN_W,40,(Color){0,0,0,150});
     DrawText("THORN",14,11,20,(Color){200,210,235,255});
     Bar(110,12,180,16,P.hp/(float)P_HP_MAX,(Color){210,70,70,255});
