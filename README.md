@@ -1,11 +1,12 @@
 # Thorn
 
 A cinematic-platformer tribute to Blizzard's **Blackthorne** (1994), written in C
-on **raylib 6.0**. Weighty, no-jump traversal; a pump-shotgun that fires forward
+on **raylib 6.0**. Weighty traversal (with a jump); a pump-shotgun that fires forward
 **and over the shoulder**; ducking into background **shadow alcoves** to let
 bullets pass. Original art, naming, and levels — see **[DESIGN.md](DESIGN.md)**.
 
-Status: **v0.3 — M2 complete**: combat & items depth on top of the Sunken Mines
+Status: **v0.5** — original sprite art, a sampled shotgun SFX, and a **jump**
+(`Space`), on top of: combat & items depth over the Sunken Mines
 area — magazine/reserve ammo with auto-reload, shotgun power/speed upgrades,
 placed bombs that blow cracked walls, moving lifts that carry you, three enemy
 types (shooter / advancing brute / cover-using sentry), and procedural audio.
@@ -33,7 +34,8 @@ source into `vendor/` (a few minutes, once). After that, launches are instant.
 | Up — climb ledge / enter shadow / use door / free NPC / lever | `W` or `↑` |
 | Down — climb down / leave shadow / duck | `S` or `↓` |
 | Walk (careful) | `Shift` |
-| Fire forward | `Space` / `J` |
+| **Jump** | `Space` |
+| Fire forward | `J` / `Ctrl` |
 | **Fire backward (over the shoulder)** | `K` |
 | Place bomb (blows cracked walls) | `E` |
 | Pause · Debug overlay | `P` · `` ` `` or `Tab` |

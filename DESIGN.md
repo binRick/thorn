@@ -5,7 +5,9 @@
 > `../Chernobyl`, `../Chernobyl2`, and `../uapd`, and emits a recurring **JSON
 > instrumentation log** so game state can be reconstructed after any bug.
 
-Status: **v0.3 — M2 complete** (combat & items depth on top of the M1 area:
+Status: **v0.5** — M2 complete plus original code-generated sprite art, a sampled
+shotgun SFX, and a **jump** (a deliberate divergence from Blackthorne; see §2).
+Detail below. (combat & items depth on top of the M1 area:
 magazine/reserve ammo with auto-reload, shotgun power/speed upgrades, placed
 bombs that blow cracked walls, moving lifts that carry the player, three enemy
 types incl. cover-using and advancing AI, and procedural audio; full JSON
@@ -16,7 +18,7 @@ instrumentation; `--selftest` + `--headless`). North star for the full game.
 ## 1. What this is (and what it is not)
 
 Thorn is an **original game** that faithfully reproduces the *mechanics and feel*
-of Blackthorne — the weighty, no-jump traversal; the pump-shotgun that fires both
+of Blackthorne — the weighty traversal; the pump-shotgun that fires both
 forward and **over the shoulder**; ducking into background **shadow alcoves** to
 let bullets pass. Game mechanics are not copyrightable, and re-implementing them
 is the whole point of a clone.
@@ -65,8 +67,12 @@ the Ashlands → the Usurper's Keep**.
 
 ## 2. Design pillars
 
-1. **Weight over agility.** Movement is deliberate and momentum-driven. There is
-   **no jump**. Mastery is reading rooms and timing, not platforming dexterity.
+1. **Weight first.** Movement is deliberate and momentum-driven; mastery is
+   reading rooms and timing, not twitch dexterity. *Divergence from Blackthorne:*
+   the source pointedly has **no jump** — Thorn adds a weighty **jump** (a
+   deliberate departure toward the Prince-of-Persia/Flashback end of the genre).
+   The jump is tuned short and committed so traversal stays deliberate, and
+   bridges/pits are still sized so a jump alone won't trivialise them.
 2. **The gun is a conversation.** Shotgun duels are about facing, cover, and the
    over-the-shoulder back-shot. Enemies use the same rules you do.
 3. **The third plane.** Every fight is 2D + a shadow plane: step back into an
@@ -80,9 +86,12 @@ the Ashlands → the Usurper's Keep**.
 
 ## 3. Gameplay mechanics (detailed)
 
-### 3.1 Locomotion (no jump)
-- **States:** `IDLE`, `WALK`, `RUN`, `TURN`, `DUCK`, `COVER`, `CLIMB_UP`,
-  `CLIMB_DOWN`, `FALL`, `FIRE_FWD`, `FIRE_BACK`, `HIT`, `DEAD`.
+### 3.1 Locomotion
+- **States:** `IDLE`, `WALK`, `RUN`, `TURN`, `COVER`, `RELOAD`, `CLIMB_UP`,
+  `CLIMB_DOWN`, `JUMP`, `FALL`, `FIRE_FWD`, `FIRE_BACK`, `HIT`, `DEAD`.
+- **Jump:** `Space` gives a single grounded jump (impulse `JUMP_V`, ~2.3 tiles;
+  also launches off lifts); no double-jump. Airborne reads as `JUMP` while rising,
+  `FALL` while descending. Full air control for an arcadey feel.
 - **Momentum:** horizontal velocity accelerates toward a target speed and decays
   with ground friction; you skid slightly on stop and on turn. A **turn** has a
   short commit window (you pivot in place before moving the other way) — this is
@@ -160,7 +169,8 @@ is an optional objective.
 | Up / climb / use / talk / enter shadow | `↑` or `W` |
 | Down / climb down / exit shadow / duck | `↓` or `S` |
 | Walk (careful) | `Shift` |
-| **Fire forward** | `Space` or `J` |
+| **Jump** | `Space` |
+| **Fire forward** | `J` or `Ctrl` |
 | **Fire backward (over shoulder)** | `K` |
 | Place bomb | `E` |
 | Reload | automatic when the magazine empties (if shells remain) |

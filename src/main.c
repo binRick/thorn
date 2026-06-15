@@ -72,6 +72,7 @@ static const char *JStr(const char *s){
 #define WALK_SPD   95.0f
 #define FRICTION   1700.0f
 #define FALL_HURT  980.0f
+#define JUMP_V     540.0f          // jump impulse (~2.3 tiles high)
 
 #define P_HP_MAX   100
 #define P_RANGE    380.0f
@@ -190,7 +191,7 @@ static void Ev(const char*fmt,...){ va_list ap; va_start(ap,fmt); vsnprintf(g_ev
 
 // ---- Input ------------------------------------------------------------------
 typedef struct { int left,right,walk;            // held
-                 int up,down,fireF,fireB,use,cycle; } Input; // edge
+                 int up,down,fireF,fireB,use,cycle,jump; } Input; // edge
 
 static Input KeyInput(void){
     Input in={0};
@@ -199,8 +200,9 @@ static Input KeyInput(void){
     in.walk  = IsKeyDown(KEY_LEFT_SHIFT)||IsKeyDown(KEY_RIGHT_SHIFT);
     in.up    = IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W);
     in.down  = IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S);
-    in.fireF = IsKeyPressed(KEY_SPACE)||IsKeyPressed(KEY_J);
+    in.fireF = IsKeyPressed(KEY_J)||IsKeyPressed(KEY_LEFT_CONTROL);
     in.fireB = IsKeyPressed(KEY_K);
+    in.jump  = IsKeyPressed(KEY_SPACE);
     in.use   = IsKeyPressed(KEY_E)||IsKeyPressed(KEY_ENTER);
     in.cycle = IsKeyPressed(KEY_Q);
     return in;
@@ -221,6 +223,7 @@ static Input DemoFrameInput(long f){
     if(f%22==3)  in.up=1;     // ~5.5 Hz: throws levers / uses doors / climbs in passing
     if(f%440==220) in.fireB=1;
     if(f%600==90)  in.use=1;  // occasionally drop a bomb (exercises the explosive path)
+    if(f%140==30)  in.jump=1; // occasional jump (exercises the airborne path)
     return in;
 }
 
@@ -377,7 +380,7 @@ static const char* PStateName(void){
     if(P.inCover) return "COVER";
     if(P.reloadT>0) return "RELOAD";
     if(P.muzzle>0) return P.muzzleDir==P.face?"FIRE_FWD":"FIRE_BACK";
-    if(!P.onGround) return "FALL";
+    if(!P.onGround) return P.vy<0?"JUMP":"FALL";
     if(P.turning) return "TURN";
     if(fabsf(P.vx)>WALK_SPD+10) return "RUN";
     if(fabsf(P.vx)>5) return "WALK";
@@ -385,7 +388,7 @@ static const char* PStateName(void){
 }
 
 // ---- Combat -----------------------------------------------------------------
-enum { SND_FIRE, SND_DRY, SND_RELOAD, SND_ENEMYFIRE, SND_HIT, SND_DEATH, SND_PICKUP, SND_LEVER, SND_BOMB, SND_UPGRADE, SND_N };
+enum { SND_FIRE, SND_DRY, SND_RELOAD, SND_ENEMYFIRE, SND_HIT, SND_DEATH, SND_PICKUP, SND_LEVER, SND_BOMB, SND_UPGRADE, SND_JUMP, SND_N };
 static int   g_audio=0; static Sound g_snd[SND_N];   // filled by InitAudio() (Chunk E); no-op until then
 static void SndPlay(int id){ if(g_audio && id>=0 && id<SND_N) PlaySound(g_snd[id]); }
 
@@ -551,6 +554,7 @@ static void UpdatePlayer(Input in){
     if(in.fireF) Fire(P.face);
     if(in.fireB) Fire(-P.face);
     if(in.use)   PlaceBomb();   // E: drop a bomb (blows cracked walls / clusters)
+    if(in.jump && (P.onGround||P.onLift>=0)){ P.vy=-JUMP_V; P.onGround=0; P.onLift=-1; SndPlay(SND_JUMP); DebugLog("jump","\"x\":%.1f,\"y\":%.1f",P.x,P.y); Ev("jump"); }
 
     P.vy=fminf(P.vy+GRAV*DT,MAXFALL);
     PlayerMoveX(); PlayerMoveY(); ResolveLifts();
@@ -854,7 +858,7 @@ static void DrawHUD(void){
     DrawText(TextFormat("BOMB %d  SHARD %d  KEY %d  GUN P%d S%d",P.bombs,P.shards,P.keys,P.gunPow,P.gunSpd),470,12,18,(Color){180,200,210,255});
     DrawText(TextFormat("%s / %s",g_areaName,g_roomName),SCREEN_W-380,12,18,(Color){150,160,180,255});
     DrawText(TextFormat("STATE %s",PStateName()),14,SCREEN_H-26,18,(Color){150,170,190,255});
-    DrawText("A/D move  W use/climb  S down  SPACE fire  K back-fire  ` debug",360,SCREEN_H-26,16,(Color){90,100,115,255});
+    DrawText("A/D move  SPACE jump  W climb/use  J fire  K back  E bomb  ` debug",360,SCREEN_H-26,16,(Color){90,100,115,255});
     if(g_won){ const char*m=g_areaClear?"AREA CLEAR":"LEVEL CLEAR"; int w=MeasureText(m,52); DrawRectangle(0,SCREEN_H/2-50,SCREEN_W,100,(Color){0,0,0,160}); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,(Color){120,230,140,255}); }
     if(P.dead){ const char*m="YOU DIED"; int w=MeasureText(m,52); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,(Color){220,80,80,255}); }
     if(g_paused){ const char*m="PAUSED"; int w=MeasureText(m,40); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-20,40,RAYWHITE); }
@@ -899,6 +903,7 @@ static void InitAudio(void){
     g_snd[SND_LEVER]     = GenTone(0.12f,200,120,1,0.6f);
     g_snd[SND_BOMB]      = GenTone(0.50f,120, 40,2,1.0f);
     g_snd[SND_UPGRADE]   = GenTone(0.30f,500,900,0,0.6f);
+    g_snd[SND_JUMP]      = GenTone(0.14f,300,520,0,0.4f);
     g_audio=1;
 }
 
@@ -965,7 +970,7 @@ int main(int argc,char**argv){
         InitSprites();    // uploads generated textures; needs the GL context above
     }
 
-    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.4.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
+    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.5.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
     DebugLog("window","\"w\":%d,\"h\":%d,\"monitor\":%d",SCREEN_W,SCREEN_H,g_headless?0:GetCurrentMonitor());
 
     // New game: stats, then the first room (LoadRoom logs its own "level" event).
@@ -1003,7 +1008,7 @@ int main(int argc,char**argv){
             acc+=ft; int steps=0;
             while(acc>=DT && steps<5){
                 SimStep(in);
-                in.up=in.down=in.fireF=in.fireB=in.use=in.cycle=0;   // consume edges after first sub-step
+                in.up=in.down=in.fireF=in.fireB=in.use=in.cycle=in.jump=0;   // consume edges after first sub-step
                 acc-=DT; steps++; g_frame++;
                 if((g_rate>0 && g_frame%g_rate==0) || g_rate<=0) EmitState();
                 if(g_maxFrames && g_frame>=g_maxFrames) running=0;
