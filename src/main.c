@@ -735,6 +735,7 @@ static void UpdatePlayer(Input in){
     } }
     for(int i=0;i<g_cpN;i++){ if(!g_cps[i].hit && g_cps[i].c==ccol && g_cps[i].r==feetRow){ g_cps[i].hit=1;
         snprintf(g_cpPath,sizeof g_cpPath,"%s",g_roomPath); g_cpX=P.x; g_cpY=P.y; g_cpFace=P.face;
+        SndPlay(SND_UPGRADE); FloatSpawn(pcx(),P.y-6,"CHECKPOINT"); Emit(pcx(),pcy(),12,160,0.7f,2.0f,(Color){255,225,140,255},1,1);   // chime + flare
         DebugLog("checkpoint","\"x\":%.1f,\"y\":%.1f",P.x,P.y); Ev("checkpoint reached"); } }
 }
 
