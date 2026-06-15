@@ -123,6 +123,7 @@ static struct {
     int   hp, mag, reserve, keys, bombs, shards;
     int   gunPow, gunSpd; float reloadT;
     int   onLift;          // index of the lift the player is riding, or -1
+    float hurtT;           // flinch-animation timer
     int   dead; float deadT;
 } P;
 
@@ -462,7 +463,7 @@ static void Fire(int dir){
 
 static void HurtPlayer(int dmg,const char*cause){
     if(g_god||P.iframes>0||P.dead) return;
-    P.hp-=dmg; P.iframes=IFRAMES;
+    P.hp-=dmg; P.iframes=IFRAMES; P.hurtT=0.25f;
     Emit(pcx(),pcy(),8,240,0.4f,2.2f,(Color){200,60,60,255},0,1); g_shake=fmaxf(g_shake,5.0f);
     DebugLog("hit","\"who\":\"player\",\"dmg\":%d,\"hp\":%d,\"cause\":\"%s\"",dmg,P.hp,cause);
     Ev("player hit -%d (%s)",dmg,cause);
@@ -537,7 +538,7 @@ static void ResolveLifts(void){
 
 static void UpdatePlayer(Input in){
     if(P.dead){ P.deadT+=DT; if(P.deadT>1.4f) RespawnAtCheckpoint(); return; }
-    P.iframes=fmaxf(0,P.iframes-DT); P.fireCD=fmaxf(0,P.fireCD-DT); P.muzzle=fmaxf(0,P.muzzle-DT);
+    P.iframes=fmaxf(0,P.iframes-DT); P.fireCD=fmaxf(0,P.fireCD-DT); P.muzzle=fmaxf(0,P.muzzle-DT); P.hurtT=fmaxf(0,P.hurtT-DT);
     if(P.reloadT>0){ P.reloadT-=DT; if(P.reloadT<=0){ int load=MAG_MAX-P.mag; if(load>P.reserve)load=P.reserve; P.mag+=load; P.reserve-=load; DebugLog("reload","\"done\":true,\"mag\":%d,\"reserve\":%d",P.mag,P.reserve); Ev("reloaded (%d)",P.mag); } }
 
     if(P.climbT>0){ P.climbT-=DT; return; }
@@ -748,6 +749,32 @@ static const char *HERO_WC[] = {   // stride: other leg forward
     "..obddo........obddo","..okko..........okko","..oko............oko","..oo..............oo",
     "...................","...................",
 };
+static const char *HERO_BODY_FIRE[] = {   // gun raised + muzzle flare
+    "......oooooo........",".....oBBBBBBo.......",".....oBbbbbddo......",".....obbbbbddo......",
+    ".....oyyyyyddo......",".....obbbbbddo......","......obbbddo.......",".......obbo.........",
+    "...oBBBBbbbdddo.....","..oBBbbbbbbbdddo....","..obBbbDDDbbddmMMMn","..obBbbbbbbbddmMMMw",
+    "..obBbbDDDbbdddo....","..obBbbbbbbbdddo....","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
+    "..obbbbbbbbbddo.....","...obDDDDDDDddo.....",
+};
+static const char *HERO_BODY_HURT[] = {   // head snapped back (flinch)
+    ".....oooooo.........","....oBBBBBBo........","....oBbbbbddo.......","....obbbbbddo.......",
+    "....oyyyyyddo.......","....obbbbbddo.......",".....obbbddo........",".......obbo.........",
+    "...oBBBBbbbdddo.....","..oBBbbbbbbbdddo....","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
+    "..obBbbDDDbbddmMMMn.","..obBbbbbbbbddmMMMn.","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
+    "..obbbbbbbbbddo.....","...obDDDDDDDddo.....",
+};
+static const char *HERO_BODY_CLIMB[] = {  // both arms reaching up (no gun)
+    ".....o....o........",".....obo..obo......",".....ob....bo......","......oooooo.......",
+    ".....oBbbbddo......",".....oyyyyddo......",".....obbbbddo......",".......obbo........",
+    "....oBBbbbbo.......","...oBbbbbbbo.......","...obBbbDDbo.......","...obBbbbbbo.......",
+    "...obBbbDDbo.......","...obbbbbbo........","....obDDDdo........","...................",
+    "...................","...................",
+};
+static const char *HERO_CLIMBLEG[] = {    // legs tucked while climbing
+    "....obbo.obbo......","....obdo.obdo......","....okdo.okdo......",".....oko..oko......",
+    "......o....o.......","...................","...................","...................",
+    "...................","...................",
+};
 static const char *SPR_GUARD[] = {
     "...oo...oo...oo.....","....oBBBBBBBdo......","...oBbbbbbbbddo.....","...obbbbbbbbddo.....",
     "...oybbbybbbddo.....","...obbbbbbbbddo.....","....obbbbbbddo......","...oBBBBbbbdddo.....",
@@ -813,7 +840,7 @@ static int g_sprites=0;
 // Drop-in sprite strips: external PNGs in assets/sprites/ (horizontal frame
 // strips). Loaded if present, else the generated art is the fallback.
 typedef struct { Texture2D tex; int frames; float fps; int ok; } Strip;
-static Strip g_sHeroIdle,g_sHeroWalk,g_sEnemy[4];
+static Strip g_sHeroIdle,g_sHeroWalk,g_sHeroFire,g_sHeroHurt,g_sHeroClimb,g_sEnemy[4];
 static Strip LoadStrip(const char*path,int frames,float fps){
     Strip s; s.tex=(Texture2D){0}; s.frames=frames<1?1:frames; s.fps=fps; s.ok=0;
     if(FileExists(path)){ s.tex=LoadTexture(path); if(s.tex.id>0){ SetTextureFilter(s.tex,TEXTURE_FILTER_POINT); s.ok=1; } }
@@ -840,6 +867,9 @@ static void InitSprites(void){
     // Drop-in sprite strips (override the generated art if the PNGs are present).
     g_sHeroIdle=LoadStrip("assets/sprites/hero_idle.png",2,4.0f);     // breathe
     g_sHeroWalk=LoadStrip("assets/sprites/hero_walk.png",4,11.0f);    // walk cycle
+    g_sHeroFire=LoadStrip("assets/sprites/hero_fire.png",1,1.0f);     // recoil/aim
+    g_sHeroHurt=LoadStrip("assets/sprites/hero_hurt.png",1,1.0f);     // flinch
+    g_sHeroClimb=LoadStrip("assets/sprites/hero_climb.png",2,6.0f);   // reach cycle
     g_sEnemy[0]=LoadStrip("assets/sprites/skarl.png",2,3.0f);
     g_sEnemy[1]=LoadStrip("assets/sprites/brute.png",2,3.5f);
     g_sEnemy[2]=LoadStrip("assets/sprites/sentry.png",2,3.0f);
@@ -876,6 +906,9 @@ static int GenAssets(void){
     Color blue={92,150,235,255}; int bob[2]={0,1};
     { Image f0=ComposeFrame(HERO_BODY,HERO_STAND,blue),f1=ComposeFrame(HERO_BODY,HERO_STAND,blue); Image fr[2]={f0,f1}; StripExport("assets/sprites/hero_idle.png",fr,2,bob); UnloadImage(f0); UnloadImage(f1); }
     { Image a=ComposeFrame(HERO_BODY,HERO_WA,blue),b=ComposeFrame(HERO_BODY,HERO_WB,blue),c=ComposeFrame(HERO_BODY,HERO_WC,blue); Image fr[4]={a,b,c,b}; StripExport("assets/sprites/hero_walk.png",fr,4,NULL); UnloadImage(a); UnloadImage(b); UnloadImage(c); }
+    { Image f=ComposeFrame(HERO_BODY_FIRE,HERO_STAND,blue); Image fr[1]={f}; StripExport("assets/sprites/hero_fire.png",fr,1,NULL); UnloadImage(f); }
+    { Image f=ComposeFrame(HERO_BODY_HURT,HERO_STAND,blue); Image fr[1]={f}; StripExport("assets/sprites/hero_hurt.png",fr,1,NULL); UnloadImage(f); }
+    { Image c0=ComposeFrame(HERO_BODY_CLIMB,HERO_CLIMBLEG,blue),c1=ComposeFrame(HERO_BODY_CLIMB,HERO_CLIMBLEG,blue); Image fr[2]={c0,c1}; int yo[2]={0,1}; StripExport("assets/sprites/hero_climb.png",fr,2,yo); UnloadImage(c0); UnloadImage(c1); }
     const char*ef[4]={"skarl","brute","sentry","maldrak"};
     Color ec[4]={{200,72,72,255},{170,70,60,255},{156,90,196,255},{164,44,64,255}};
     for(int i=0;i<4;i++){ char p[128]; snprintf(p,sizeof p,"assets/sprites/%s.png",ef[i]);
@@ -1003,9 +1036,13 @@ static void DrawWorld(void){
     for(int i=0;i<MAXBOMB;i++) if(g_bomb[i].active){ Bomb*b=&g_bomb[i]; DrawCircle((int)b->x,(int)b->y-6,9,(Color){40,40,46,255}); int blink=((int)(b->fuse*8))&1; DrawCircle((int)b->x,(int)b->y-16,3,blink?(Color){255,80,60,255}:(Color){110,40,30,255}); }
     if(g_boomT>0){ float k=1.0f-(g_boomT/0.35f); float rad=BOMB_RADIUS*k; DrawCircleLines((int)g_boomX,(int)g_boomY,rad,(Color){255,180,60,(unsigned char)(220*(1-k))}); DrawCircle((int)g_boomX,(int)g_boomY,rad*0.5f,(Color){255,140,40,(unsigned char)(120*(1-k))}); }
     if(!P.dead){
-        if(g_sprites){ float a=P.inCover?0.5f:(P.iframes>0?0.5f:1.0f); int moving=fabsf(P.vx)>5;
-            if(moving && g_sHeroWalk.ok) DrawActorStrip(&g_sHeroWalk,AnimF(&g_sHeroWalk),P.x,P.y,PW,PH,P.face,a,0);
-            else if(g_sHeroIdle.ok) DrawActorStrip(&g_sHeroIdle,AnimF(&g_sHeroIdle),P.x,P.y,PW,PH,P.face,a,0);
+        if(g_sprites){ float a=P.inCover?0.5f:(P.iframes>0?0.5f:1.0f); int moving=fabsf(P.vx)>5; Strip*s=NULL;
+            if(P.climbT>0 && g_sHeroClimb.ok) s=&g_sHeroClimb;
+            else if(P.hurtT>0 && g_sHeroHurt.ok) s=&g_sHeroHurt;
+            else if(P.muzzle>0 && g_sHeroFire.ok) s=&g_sHeroFire;
+            else if(moving && g_sHeroWalk.ok) s=&g_sHeroWalk;
+            else if(g_sHeroIdle.ok) s=&g_sHeroIdle;
+            if(s) DrawActorStrip(s,AnimF(s),P.x,P.y,PW,PH,P.face,a,0);
             else { Texture2D ht=(moving && ((int)(GetTime()*8)&1))?g_tHeroWalk:g_tHeroIdle; DrawActorTex(ht,P.x,P.y,PW,PH,P.face,a,0); }
             if(P.muzzle>0) DrawCircle((int)(P.muzzleDir>0?P.x+PW+6:P.x-6),(int)(P.y+PH*0.42f+2),8,(Color){255,230,120,235}); }
         else { Color pc = P.iframes>0?(Color){255,255,255,255}:(Color){90,150,235,255}; DrawFigure(P.x,P.y,PW,PH,P.face,pc,P.muzzle>0,P.muzzleDir,P.inCover); }
