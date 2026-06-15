@@ -218,6 +218,7 @@ static int g_noEnemies=0, g_god=0, g_demo=0, g_paused=0, g_overlay=0, g_hitboxes
 static int g_rate=24, g_maxFrames=0, g_shotFrame=0, g_startSpawn=-1;
 static long g_frame=0; static int g_won=0;
 enum { SCENE_TITLE, SCENE_PLAY }; static int g_scene=SCENE_TITLE, g_menuSel=0, g_skiptitle=0;
+static int g_diff=1; static const char*g_diffName[3]={"Easy","Normal","Hard"}; static const float g_diffMul[3]={0.6f,1.0f,1.5f};
 static char g_roomStart[160]="levels/sunken_mines/entrance.lvl";
 static const struct { const char*code; const char*path; } g_pwTable[] = {   // --password
     {"MINE","levels/sunken_mines/entrance.lvl"}, {"MIRE","levels/the_mire/entrance.lvl"},
@@ -437,7 +438,7 @@ static void RespawnAtCheckpoint(void){
 }
 
 static void NewGame(void){
-    P.hp=P_HP_MAX; P.mag=MAG_MAX; P.reserve=RESERVE_START; P.gunPow=0; P.gunSpd=0; P.reloadT=0;
+    P.hp=P_HP_MAX; P.mag=MAG_MAX; P.reserve=(g_diff==0?18:g_diff==2?8:RESERVE_START); P.gunPow=0; P.gunSpd=0; P.reloadT=0;
     P.bombs=1; P.shards=0; P.keys=0; g_keyN=0; g_collN=0; g_won=0; g_areaClear=0; g_victory=0;
     LoadRoom(g_roomStart,g_startSpawn,1);
 }
@@ -730,7 +731,7 @@ static void UpdateEnemies(void){
             EnemyMove(e);
             if(e->y>g_H*TILE+120){ e->alive=0; continue; }   // fell out
             ex=e->x+EW*0.5f; ey=e->y+EH*0.5f; dx=pcx()-ex;
-            if(!g_noEnemies && aggro && fabsf(dx)<TILE*0.9f && fabsf(pcy()-ey)<TILE*0.9f) HurtPlayer(e->type==3?18:12,"melee");
+            if(!g_noEnemies && aggro && fabsf(dx)<TILE*0.9f && fabsf(pcy()-ey)<TILE*0.9f) HurtPlayer((int)((e->type==3?18:12)*g_diffMul[g_diff]),"melee");
         }
 
         if((e->type==0||e->type==2) && !e->inCover){   // SKARL/SENTRY: pace when idle (turn at walls/ledges)
@@ -749,7 +750,7 @@ static void UpdateEnemies(void){
             float mx=e->face>0?e->x+EW:e->x, my=ey, endx=mx+e->face*E_RANGE;
             SpawnShot(mx,my,endx,my,1); SndPlay(SND_ENEMYFIRE);
             DebugLog("enemyfire","\"i\":%d,\"type\":%d,\"x\":%.1f,\"y\":%.1f,\"dir\":%d",i,e->type,mx,my,e->face);
-            if(!P.inCover && fabsf(dx)<E_RANGE && fabsf(pcy()-my)<TILE*0.6f && LineClear(mx,pcx(),my)) HurtPlayer(e->type==3?18:E_DMG,"shot");
+            if(!P.inCover && fabsf(dx)<E_RANGE && fabsf(pcy()-my)<TILE*0.6f && LineClear(mx,pcx(),my)) HurtPlayer((int)((e->type==3?18:E_DMG)*g_diffMul[g_diff]),"shot");
             if(e->type==2){ e->inCover=1; e->coverT=1.0f; DebugLog("cover","\"who\":\"enemy\",\"i\":%d,\"in\":true",i); }   // sentry ducks after firing
         }
     }
@@ -1186,7 +1187,8 @@ static void DrawTitle(void){
         Color c=sel?(Color){240,226,150,255}:(Color){140,150,172,255};
         if(sel) DrawText(">",SCREEN_W/2-w/2-34,yy,fs,c);
         DrawText(items[i],SCREEN_W/2-w/2,yy,fs,c); }
-    const char*h="Up/Down + Enter      Esc quits"; int hw=MeasureText(h,18);
+    const char*d=TextFormat("Difficulty:  < %s >",g_diffName[g_diff]); int dw=MeasureText(d,22); DrawText(d,SCREEN_W/2-dw/2,556,22,(Color){210,185,120,255});
+    const char*h="Up/Down select    Left/Right difficulty    Enter start    Esc quit"; int hw=MeasureText(h,18);
     DrawText(h,SCREEN_W/2-hw/2,SCREEN_H-54,18,(Color){95,105,122,255});
     DrawText("original tribute to Blackthorne (1994)  -  CC0 art",14,SCREEN_H-26,14,(Color){66,74,88,255});
     DrawText(TextFormat("%d FPS",GetFPS()),SCREEN_W-78,SCREEN_H-26,18,(Color){90,140,90,255});
@@ -1270,6 +1272,7 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--dumpsprites")) dump=1;
         else if(!strcmp(argv[i],"--gen-assets")) genassets=1;
         else if(!strcmp(argv[i],"--skiptitle")) g_skiptitle=1;
+        else if(!strcmp(argv[i],"--diff")&&i+1<argc){ g_diff=atoi(argv[++i]); g_diff=g_diff<0?0:g_diff>2?2:g_diff; }
         else if(!strcmp(argv[i],"--nofx")) g_fx=0;
         else if(!strcmp(argv[i],"--continue")) docontinue=1;
         else if(!strcmp(argv[i],"--password")&&i+1<argc) snprintf(pwarg,sizeof pwarg,"%s",argv[++i]);
@@ -1324,6 +1327,8 @@ int main(int argc,char**argv){
         if(g_scene==SCENE_TITLE){
             if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W))   g_menuSel=(g_menuSel+2)%3;
             if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) g_menuSel=(g_menuSel+1)%3;
+            if(IsKeyPressed(KEY_LEFT)||IsKeyPressed(KEY_A))  g_diff=(g_diff+2)%3;
+            if(IsKeyPressed(KEY_RIGHT)||IsKeyPressed(KEY_D)) g_diff=(g_diff+1)%3;
             if(IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE)){
                 if(g_menuSel==0){ NewGame(); g_scene=SCENE_PLAY; }
                 else if(g_menuSel==1){ ContinueGame(); g_scene=SCENE_PLAY; }

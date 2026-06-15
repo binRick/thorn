@@ -79,7 +79,8 @@ CI/SSH), `--selftest` (validate the whole room graph), `--room PATH` / `--spawn 
 (boot into a specific room/entrance), `--rate N` (snapshot cadence; `0` = every
 frame), `--frames N` (run N then quit), `--shot N` (screenshot at frame N),
 `--god`, `--no-enemies`, `--demo`, `--dumpsprites`, `--gen-assets` (regenerate the
-CC0 sprite PNGs), `--nofx` (disable visual FX), `--skiptitle` (skip the menu).
+CC0 sprite PNGs), `--nofx` (disable visual FX), `--skiptitle` (skip the menu),
+`--diff N` (0 Easy / 1 Normal / 2 Hard; also set with Left/Right on the title).
 
 ## Layout
 
