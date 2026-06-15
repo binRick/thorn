@@ -9,6 +9,7 @@ vendor/raylib-src/
 *.log
 thorn-shot*.png
 thorn-sprites.png
+thorn-save.txt
 
 # macOS
 .DS_Store

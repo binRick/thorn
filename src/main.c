@@ -161,30 +161,38 @@ static int SolidAt(int c,int r){
 #define MAXLEVER 4
 #define MAXCP   6
 #define MAXKEY  6
-typedef struct { int c,r,id; char target[48]; int targetSpawn; int locked; char key[12]; } Door;
+typedef struct { int c,r,id; char target[48]; int targetSpawn; int locked; char key[12]; int needShards; } Door;
 typedef struct { int c,r; } Lever;
 typedef struct { int c,r,hit; } CheckMark;
 
 static Door      g_doors[MAXDOOR];   static int g_doorN=0;
 static Lever     g_levers[MAXLEVER]; static int g_leverN=0;
 static CheckMark g_cps[MAXCP];       static int g_cpN=0;
+static char      g_npcGift[MAXNPC][40];   // per-NPC gift ("ammo"/"key"/"bomb"/"hint <text>")
 static struct { char color[12]; int count; } g_keys[MAXKEY]; static int g_keyN=0;
 
 static char g_areaName[48]="Sunken Mines", g_roomName[48]="-", g_roomPath[160]="";
 static char g_cpPath[160]=""; static float g_cpX=0,g_cpY=0; static int g_cpFace=1;   // checkpoint
 static int  g_pendActive=0, g_pendSpawn=-1; static char g_pendTarget[48]="";          // deferred door
-static int  g_areaClear=0;
+static int  g_areaClear=0, g_victory=0;
+static char g_curPassword[16]="";          // password of the current room (if any)
+static char g_msg[96]=""; static float g_msgT=0;   // transient on-screen banner (hints, passwords)
 static Vector2 g_cam={0,0};
 
 static int  KeyCount(const char*c){ for(int i=0;i<g_keyN;i++) if(!strcmp(g_keys[i].color,c)) return g_keys[i].count; return 0; }
 static void KeyAdd(const char*c){ for(int i=0;i<g_keyN;i++) if(!strcmp(g_keys[i].color,c)){ g_keys[i].count++; return; } if(g_keyN<MAXKEY){ snprintf(g_keys[g_keyN].color,12,"%s",c); g_keys[g_keyN].count=1; g_keyN++; } }
 static int  KeyTotal(void){ int n=0; for(int i=0;i<g_keyN;i++) n+=g_keys[i].count; return n; }
+static void Msg(float secs,const char*fmt,...){ va_list ap; va_start(ap,fmt); vsnprintf(g_msg,sizeof g_msg,fmt,ap); va_end(ap); g_msgT=secs; }
 
 // ---- Flags / dev ------------------------------------------------------------
 static int g_noEnemies=0, g_god=0, g_demo=0, g_paused=0, g_overlay=0, g_hitboxes=0, g_selftest=0;
 static int g_rate=24, g_maxFrames=0, g_shotFrame=0, g_startSpawn=-1;
 static long g_frame=0; static int g_won=0;
 static char g_roomStart[160]="levels/sunken_mines/entrance.lvl";
+static const struct { const char*code; const char*path; } g_pwTable[] = {   // --password
+    {"MINE","levels/sunken_mines/entrance.lvl"}, {"MIRE","levels/the_mire/entrance.lvl"},
+    {"ASH","levels/the_ashlands/entrance.lvl"},  {"KEEP","levels/the_usurpers_keep/entrance.lvl"},
+};
 
 static char g_evlog[8][80]; static int g_evHead=0;
 static void Ev(const char*fmt,...){ va_list ap; va_start(ap,fmt); vsnprintf(g_evlog[g_evHead],sizeof g_evlog[0],fmt,ap); va_end(ap); g_evHead=(g_evHead+1)%8; }
@@ -275,7 +283,7 @@ static const char *FALLBACK_ROOM =
 static void AddEnemy(int c, float feet, int type){
     if(g_enN>=MAXEN) return; Enemy*e=&g_en[g_enN++];
     e->x=c*TILE+(TILE-EW)/2; e->y=feet-EH; e->vx=e->vy=0; e->face=-1;
-    e->type=type; e->hp = type==1?110 : type==2?45 : E_HP;   // brute tanky, sentry fragile
+    e->type=type; e->hp = type==3?300 : type==1?110 : type==2?45 : E_HP;   // boss/brute tanky, sentry fragile
     e->alive=1; e->onGround=1; e->inCover=0; e->coverT=0;
     e->fireT=E_INTERVAL*0.5f; e->hitFlash=0; e->st="IDLE";
 }
@@ -284,9 +292,10 @@ static void ParseRoom(const char*text,int spawnDoor){
     for(int r=0;r<64;r++) for(int c=0;c<128;c++){ g_tiles[r][c]='.'; g_alcove[r][c]=g_spike[r][c]=g_bridge[r][c]=g_crack[r][c]=0; }
     g_enN=g_pkN=g_npcN=g_doorN=g_leverN=g_cpN=g_liftN=0; g_bridgeOn=0; g_W=g_H=0;
     for(int i=0;i<MAXBOMB;i++) g_bomb[i].active=0; g_boomT=0;
-    int spawnC=-1,spawnR=-1;
-    struct { int used; char target[48]; int spawn; int locked; char key[12]; } dm[10];
-    for(int i=0;i<10;i++){ dm[i].used=0; dm[i].target[0]=0; dm[i].spawn=0; dm[i].locked=0; dm[i].key[0]=0; }
+    for(int i=0;i<MAXNPC;i++) g_npcGift[i][0]=0; g_curPassword[0]=0;
+    int spawnC=-1,spawnR=-1, npcMeta=0;
+    struct { int used; char target[48]; int spawn; int locked; char key[12]; int needShards; } dm[10];
+    for(int i=0;i<10;i++){ dm[i].used=0; dm[i].target[0]=0; dm[i].spawn=0; dm[i].locked=0; dm[i].key[0]=0; dm[i].needShards=0; }
 
     static char rows[64][128]; int nrows=0; int inGrid=0;
     const char*p=text; char line[256];
@@ -300,10 +309,13 @@ static void ParseRoom(const char*text,int spawnDoor){
                 else if(!strncmp(line,"@door ",6)){ int id=0,sp=0; char tg[48]="",lw[12]="",cl[12]="";
                     int got=sscanf(line+6,"%d %47s %d %11s %11s",&id,tg,&sp,lw,cl);
                     if(id>=0&&id<10&&got>=3){ dm[id].used=1; snprintf(dm[id].target,48,"%s",tg); dm[id].spawn=sp;
-                        if(got>=5&&!strcmp(lw,"lock")){ dm[id].locked=1; snprintf(dm[id].key,12,"%s",cl);} } }
+                        if(got>=5&&!strcmp(lw,"lock")){ dm[id].locked=1; snprintf(dm[id].key,12,"%s",cl);}
+                        else if(got>=5&&!strcmp(lw,"shards")){ dm[id].needShards=atoi(cl);} } }
                 else if(!strncmp(line,"@lift ",6)){ int c=0,r=0,w=2; char ax[8]="v"; float rng=4,per=3;
                     if(sscanf(line+6,"%d %d %d %7s %f %f",&c,&r,&w,ax,&rng,&per)>=6 && g_liftN<MAXLIFT){ Lift*L=&g_lifts[g_liftN++];
                         L->bx=c*TILE; L->by=r*TILE; L->w=w*TILE; L->h=14; L->axis=ax[0]=='v'?1:0; L->amp=rng*TILE; L->omega=6.2831853f/(per>0.1f?per:0.1f); L->phase=0; L->x=L->bx; L->y=L->by; L->dx=L->dy=0; } }
+                else if(!strncmp(line,"@npc ",5)){ if(npcMeta<MAXNPC){ snprintf(g_npcGift[npcMeta],40,"%s",line+5); npcMeta++; } }   // gift for the Nth 'n'
+                else if(!strncmp(line,"@password ",10)) snprintf(g_curPassword,sizeof g_curPassword,"%s",line+10);
                 continue;   // @lever is documentation; grid 'L'/'b' drive the bridge
             }
             if(line[0]==0 || line[0]==';') continue;
@@ -330,13 +342,14 @@ static void ParseRoom(const char*text,int spawnDoor){
                 case 'g': AddEnemy(c,feet,0); break;   // SKARL: stationary shooter
                 case 'G': AddEnemy(c,feet,1); break;   // BRUTE: advancing melee
                 case 's': AddEnemy(c,feet,2); break;   // SENTRY: shoots, then ducks into cover
+                case 'M': AddEnemy(c,feet,3); break;   // MALDRAK: the boss
                 case 'n': if(g_npcN<MAXNPC) g_npc[g_npcN++]=(Npc){c,r,0}; break;
                 case 'H': case 'B': case '*': case 'K': case 'a': case 'u': case 'U': if(g_pkN<MAXPK) g_pk[g_pkN++]=(Pickup){c,r,t,1}; break;
                 case 'L': if(g_leverN<MAXLEVER) g_levers[g_leverN++]=(Lever){c,r}; break;
                 case '0':case '1':case '2':case '3':case '4':case '5':case '6':case '7':case '8':case '9':{
                     int id=t-'0'; if(g_doorN<MAXDOOR){ Door*D=&g_doors[g_doorN++]; D->c=c; D->r=r; D->id=id;
-                        if(dm[id].used){ snprintf(D->target,48,"%s",dm[id].target); D->targetSpawn=dm[id].spawn; D->locked=dm[id].locked; snprintf(D->key,12,"%s",dm[id].key); }
-                        else { D->target[0]=0; D->targetSpawn=0; D->locked=0; D->key[0]=0; } }
+                        if(dm[id].used){ snprintf(D->target,48,"%s",dm[id].target); D->targetSpawn=dm[id].spawn; D->locked=dm[id].locked; snprintf(D->key,12,"%s",dm[id].key); D->needShards=dm[id].needShards; }
+                        else { D->target[0]=0; D->targetSpawn=0; D->locked=0; D->key[0]=0; D->needShards=0; } }
                 } break;
                 default: break;
             }
@@ -362,6 +375,11 @@ static void LoadRoom(const char*path,int spawnDoor,int setCheckpoint){
     if(setCheckpoint){ snprintf(g_cpPath,sizeof g_cpPath,"%s",g_roomPath); g_cpX=P.x; g_cpY=P.y; g_cpFace=P.face; }
     DebugLog("level","\"area\":\"%s\",\"room\":\"%s\",\"w\":%d,\"h\":%d,\"enemies\":%d,\"doors\":%d,\"pickups\":%d,\"levers\":%d",
              JStr(g_areaName),JStr(g_roomName),g_W,g_H,g_enN,g_doorN,g_pkN,g_leverN);
+    if(g_curPassword[0]){   // area-entrance room: save progress + show the password
+        FILE*sf=fopen("thorn-save.txt","w"); if(sf){ fprintf(sf,"%s\n%s\n",g_curPassword,g_roomPath); fclose(sf); }
+        Msg(3.5f,"PASSWORD: %s  (progress saved)",g_curPassword);
+        DebugLog("password","\"code\":\"%s\",\"path\":\"%s\"",JStr(g_curPassword),JStr(g_roomPath));
+    }
 }
 
 static void RespawnAtCheckpoint(void){
@@ -411,7 +429,7 @@ static void Fire(int dir){
     float endx = mx + dir*(hitIdx>=0?best:P_RANGE);
     SpawnShot(mx,my,endx,my,0);
     if(hitIdx>=0){ Enemy*e=&g_en[hitIdx]; e->hp-=dmg; e->hitFlash=0.12f;
-        if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); Ev("enemy %d killed",hitIdx); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"x\":%.1f,\"y\":%.1f",hitIdx,e->x,e->y); }
+        if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); Ev("enemy %d killed",hitIdx); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"x\":%.1f,\"y\":%.1f",hitIdx,e->x,e->y); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
         else { SndPlay(SND_HIT); DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":%d,\"hp\":%d",hitIdx,dmg,e->hp); }
     }
     DebugLog("fire","\"dir\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"face\":%d,\"dmg\":%d,\"mag\":%d,\"hit\":%s,\"target\":%d",
@@ -439,7 +457,7 @@ static void ExplodeBomb(float bx,float by){
     }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive) continue; float ex=e->x+EW*0.5f,ey=e->y+EH*0.5f;
         if((ex-bx)*(ex-bx)+(ey-by)*(ey-by)<BOMB_RADIUS*BOMB_RADIUS){ e->hp-=BOMB_DMG; e->hitFlash=0.12f; hits++;
-            if(e->hp<=0){ e->alive=0; e->st="DEAD"; DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"bomb\"",i); } } }
+            if(e->hp<=0){ e->alive=0; e->st="DEAD"; DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"bomb\"",i); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } } } }
     float pdx=pcx()-bx, pdy=pcy()-by; if(pdx*pdx+pdy*pdy<BOMB_RADIUS*BOMB_RADIUS) HurtPlayer(30,"bomb");
     g_boomT=0.35f; g_boomX=bx; g_boomY=by; SndPlay(SND_BOMB);
     DebugLog("bomb","\"explode\":[%.0f,%.0f],\"destroyed\":%d,\"enemiesHit\":%d",bx,by,destroyed,hits); Ev("BOOM (-%d walls)",destroyed);
@@ -513,16 +531,24 @@ static void UpdatePlayer(Input in){
         int dd=-1; for(int i=0;i<g_doorN;i++) if(pcol==g_doors[i].c){ dd=i; break; }
         int handled=0;
         if(dd>=0){ Door*D=&g_doors[dd]; handled=1;
-            if(D->locked && KeyCount(D->key)<=0){ DebugLog("door","\"id\":%d,\"locked\":true,\"need\":\"%s\"",D->id,JStr(D->key)); Ev("locked: need %s key",D->key); }
+            if(D->locked && KeyCount(D->key)<=0){ DebugLog("door","\"id\":%d,\"locked\":true,\"need\":\"%s\"",D->id,JStr(D->key)); Msg(1.6f,"Locked - need a %s key",D->key); Ev("locked: need %s key",D->key); }
+            else if(D->needShards>0 && P.shards<D->needShards){ DebugLog("door","\"id\":%d,\"needShards\":%d,\"have\":%d",D->id,D->needShards,P.shards); Msg(2.0f,"The Daystone gate needs %d shards (you have %d)",D->needShards,P.shards); Ev("gate %d/%d shards",P.shards,D->needShards); }
             else {
                 if(D->locked){ DebugLog("door","\"id\":%d,\"unlocked\":\"%s\"",D->id,JStr(D->key)); Ev("unlocked %s door",D->key); }
+                if(D->needShards>0){ DebugLog("door","\"id\":%d,\"gateOpen\":%d",D->id,D->needShards); Msg(1.6f,"The Daystone gate opens!"); }
                 if(D->target[0]==0||!strcmp(D->target,"exit")){ g_areaClear=1; g_won=1; DebugLog("door","\"id\":%d,\"areaExit\":true",D->id); Ev("AREA CLEAR"); }
                 else { snprintf(g_pendTarget,sizeof g_pendTarget,"%s",D->target); g_pendSpawn=D->targetSpawn; g_pendActive=1;
                        DebugLog("door","\"id\":%d,\"to\":\"%s\",\"spawn\":%d",D->id,JStr(D->target),D->targetSpawn); }
             }
         }
         if(!handled){
-            int didNpc=0; for(int i=0;i<g_npcN;i++) if(!g_npc[i].freed && pcol==g_npc[i].c){ g_npc[i].freed=1; didNpc=1; P.reserve+=6; SndPlay(SND_PICKUP); DebugLog("npc","\"id\":%d,\"gave\":\"ammo\"",i); Ev("freed an Aurithi (+ammo)"); break; }
+            int didNpc=0; for(int i=0;i<g_npcN;i++) if(!g_npc[i].freed && pcol==g_npc[i].c){ g_npc[i].freed=1; didNpc=1; SndPlay(SND_PICKUP);
+                const char*gift = g_npcGift[i][0]?g_npcGift[i]:"ammo";
+                if(!strncmp(gift,"hint",4)) Msg(3.5f,"%s", gift[4]?gift+5:"...");
+                else if(!strcmp(gift,"key")){ KeyAdd("gold"); P.keys=KeyTotal(); Msg(2.0f,"The Aurithi gives you a gold key"); }
+                else if(!strcmp(gift,"bomb")){ P.bombs++; Msg(2.0f,"The Aurithi gives you a bomb"); }
+                else { P.reserve+=8; Msg(2.0f,"The Aurithi shares shells"); }
+                DebugLog("npc","\"id\":%d,\"gave\":\"%s\"",i,JStr(gift)); Ev("freed an Aurithi"); break; }
             if(!didNpc){
                 int didLever=0; for(int i=0;i<g_leverN;i++) if(pcol==g_levers[i].c){ g_bridgeOn=!g_bridgeOn; didLever=1; SndPlay(SND_LEVER); DebugLog("lever","\"id\":%d,\"bridge\":%s",i,g_bridgeOn?"true":"false"); Ev("lever: bridge %s",g_bridgeOn?"out":"in"); break; }
                 if(!didLever){
@@ -602,12 +628,12 @@ static void UpdateEnemies(void){
 
         if(e->type==2 && e->inCover){ e->coverT-=DT; if(e->coverT<=0){ e->inCover=0; DebugLog("cover","\"who\":\"enemy\",\"i\":%d,\"in\":false",i); } }
 
-        if(e->type==1){   // BRUTE: advance toward the player, melee on contact
-            e->vx = (aggro && fabsf(dx)>TILE*0.9f) ? (dx>0?1:-1)*120.0f : 0;
+        if(e->type==1 || e->type==3){   // BRUTE/BOSS: advance toward the player, melee on contact
+            e->vx = (aggro && fabsf(dx)>TILE*0.9f) ? (dx>0?1:-1)*(e->type==3?95.0f:120.0f) : 0;
             EnemyMove(e);
             if(e->y>g_H*TILE+120){ e->alive=0; continue; }   // fell out
             ex=e->x+EW*0.5f; ey=e->y+EH*0.5f; dx=pcx()-ex;
-            if(!g_noEnemies && aggro && fabsf(dx)<TILE*0.85f && fabsf(pcy()-ey)<TILE*0.9f) HurtPlayer(12,"brute");
+            if(!g_noEnemies && aggro && fabsf(dx)<TILE*0.9f && fabsf(pcy()-ey)<TILE*0.9f) HurtPlayer(e->type==3?18:12,"melee");
         }
 
         e->st = e->inCover?"COVER" : (aggro?"AIM":"IDLE");
@@ -615,11 +641,11 @@ static void UpdateEnemies(void){
 
         // Ranged fire (SKARL + SENTRY; brute is melee-only).
         if(e->type!=1 && !e->inCover && e->fireT<=0 && aggro && (dx*e->face)>0 && !P.dead){
-            e->fireT = e->type==2?1.2f:E_INTERVAL;
+            e->fireT = e->type==2?1.2f : e->type==3?0.9f : E_INTERVAL;
             float mx=e->face>0?e->x+EW:e->x, my=ey, endx=mx+e->face*E_RANGE;
             SpawnShot(mx,my,endx,my,1); SndPlay(SND_ENEMYFIRE);
             DebugLog("enemyfire","\"i\":%d,\"type\":%d,\"x\":%.1f,\"y\":%.1f,\"dir\":%d",i,e->type,mx,my,e->face);
-            if(!P.inCover && fabsf(dx)<E_RANGE && fabsf(pcy()-my)<TILE*0.6f && LineClear(mx,pcx(),my)) HurtPlayer(E_DMG,"shot");
+            if(!P.inCover && fabsf(dx)<E_RANGE && fabsf(pcy()-my)<TILE*0.6f && LineClear(mx,pcx(),my)) HurtPlayer(e->type==3?18:E_DMG,"shot");
             if(e->type==2){ e->inCover=1; e->coverT=1.0f; DebugLog("cover","\"who\":\"enemy\",\"i\":%d,\"in\":true",i); }   // sentry ducks after firing
         }
     }
@@ -636,6 +662,7 @@ static void UpdateCam(void){
 // the room mid-update while we're iterating its entities).
 static void SimStep(Input in){
     UpdateLifts();
+    if(g_msgT>0) g_msgT-=DT;
     UpdatePlayer(in);
     if(g_pendActive){
         g_pendActive=0;
@@ -730,7 +757,7 @@ static Image ImgBridge(void){
     return im;
 }
 
-static Texture2D g_tHeroIdle,g_tHeroWalk,g_tEnemy[3],g_tStone,g_tCrack,g_tBridge;
+static Texture2D g_tHeroIdle,g_tHeroWalk,g_tEnemy[4],g_tStone,g_tCrack,g_tBridge;
 static int g_sprites=0;
 static void InitSprites(void){
     Color pb={92,150,235,255},pd={50,92,168,255};
@@ -741,6 +768,8 @@ static void InitSprites(void){
     im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e0,e0d); g_tEnemy[0]=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e1,e1d); g_tEnemy[1]=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e2,e2d); g_tEnemy[2]=LoadTextureFromImage(im); UnloadImage(im);
+    Color e3={130,36,58,255},e3d={74,18,34,255};   // MALDRAK: dark crimson (drawn large)
+    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,e3,e3d); g_tEnemy[3]=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgStone((Color){58,54,64,255},0); g_tStone=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgStone((Color){78,64,52,255},1); g_tCrack=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgBridge(); g_tBridge=LoadTextureFromImage(im); UnloadImage(im);
@@ -831,9 +860,9 @@ static void DrawWorld(void){
     }
     for(int i=0;i<g_npcN;i++){ Npc*n=&g_npc[i]; float x=n->c*TILE+(TILE-EW)/2,y=(n->r+1)*TILE-EH; DrawFigure(x,y,EW,EH,1,n->freed?(Color){120,200,140,255}:(Color){150,150,160,255},0,1,0); }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive){ DrawRectangle((int)e->x,(int)(e->y+EH-8),(int)EW,8,(Color){90,30,30,200}); continue; }
-        if(g_sprites){ float sc=e->type==1?1.14f:1.0f, eh=EH*sc; DrawActorTex(g_tEnemy[e->type],e->x,e->y+EH-eh,EW,eh,e->face,e->inCover?0.45f:1.0f,e->hitFlash>0); }
+        if(g_sprites){ float sc=e->type==3?1.7f:e->type==1?1.14f:1.0f, eh=EH*sc, ew=EW*sc; DrawActorTex(g_tEnemy[e->type],e->x+EW*0.5f-ew*0.5f,e->y+EH-eh,ew,eh,e->face,e->inCover?0.45f:1.0f,e->hitFlash>0); }
         else { Color col = e->hitFlash>0?(Color){255,255,255,255} : e->type==1?(Color){150,55,55,255} : e->type==2?(Color){150,80,185,255} : (Color){200,70,70,255}; DrawFigure(e->x,e->y,EW,EH,e->face,col,0,e->face,e->inCover); }
-        if(!e->inCover){ int mh=e->type==1?110:e->type==2?45:E_HP; DrawRectangle((int)e->x,(int)e->y-7,(int)EW,4,(Color){40,40,40,255}); DrawRectangle((int)e->x,(int)e->y-7,(int)(EW*e->hp/(float)mh),4,(Color){90,220,90,255}); }
+        if(!e->inCover){ int mh=e->type==3?300:e->type==1?110:e->type==2?45:E_HP; float bw=e->type==3?EW*1.7f:EW, bx=e->x+EW*0.5f-bw*0.5f; DrawRectangle((int)bx,(int)e->y-7,(int)bw,4,(Color){40,40,40,255}); DrawRectangle((int)bx,(int)e->y-7,(int)(bw*e->hp/(float)mh),4,e->type==3?(Color){230,90,90,255}:(Color){90,220,90,255}); }
     }
     for(int i=0;i<MAXSHOT;i++){ Shot*s=&g_shot[i]; if(s->age<0||s->age>0.09f) continue; Color c=s->owner?(Color){255,150,60,255}:(Color){120,230,255,255}; DrawLineEx((Vector2){s->x1,s->y1},(Vector2){s->x2,s->y2},3,c); }
     for(int i=0;i<MAXBOMB;i++) if(g_bomb[i].active){ Bomb*b=&g_bomb[i]; DrawCircle((int)b->x,(int)b->y-6,9,(Color){40,40,46,255}); int blink=((int)(b->fuse*8))&1; DrawCircle((int)b->x,(int)b->y-16,3,blink?(Color){255,80,60,255}:(Color){110,40,30,255}); }
@@ -859,7 +888,8 @@ static void DrawHUD(void){
     DrawText(TextFormat("%s / %s",g_areaName,g_roomName),SCREEN_W-380,12,18,(Color){150,160,180,255});
     DrawText(TextFormat("STATE %s",PStateName()),14,SCREEN_H-26,18,(Color){150,170,190,255});
     DrawText("A/D move  SPACE jump  W climb/use  J fire  K back  E bomb  ` debug",360,SCREEN_H-26,16,(Color){90,100,115,255});
-    if(g_won){ const char*m=g_areaClear?"AREA CLEAR":"LEVEL CLEAR"; int w=MeasureText(m,52); DrawRectangle(0,SCREEN_H/2-50,SCREEN_W,100,(Color){0,0,0,160}); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,(Color){120,230,140,255}); }
+    if(g_msgT>0){ int w=MeasureText(g_msg,22); DrawRectangle(0,50,SCREEN_W,30,(Color){0,0,0,150}); DrawText(g_msg,SCREEN_W/2-w/2,55,22,(Color){235,225,160,255}); }
+    if(g_won){ const char*m=g_victory?"THE USURPER FALLS":g_areaClear?"AREA CLEAR":"LEVEL CLEAR"; Color col=g_victory?(Color){235,210,90,255}:(Color){120,230,140,255}; int w=MeasureText(m,52); DrawRectangle(0,SCREEN_H/2-50,SCREEN_W,100,(Color){0,0,0,170}); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,col); }
     if(P.dead){ const char*m="YOU DIED"; int w=MeasureText(m,52); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,(Color){220,80,80,255}); }
     if(g_paused){ const char*m="PAUSED"; int w=MeasureText(m,40); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-20,40,RAYWHITE); }
 }
@@ -907,34 +937,37 @@ static void InitAudio(void){
     g_audio=1;
 }
 
-// ---- Self-test: validate the Sunken Mines room graph (no window) ------------
+// ---- Self-test: validate the whole multi-area room graph (no window) --------
 static int RunSelfTest(void){
-    const char* names[]={"entrance","shaft","cavern","depths"}; int N=4;
-    int mask[8]={0}; char path[160];
-    for(int i=0;i<N;i++){ snprintf(path,sizeof path,"levels/sunken_mines/%s.lvl",names[i]);
-        FILE*f=fopen(path,"r"); int existed=(f!=NULL); if(f)fclose(f);
-        LoadRoom(path,-1,0);
-        for(int d=0;d<g_doorN;d++) mask[i]|=(1<<g_doors[d].id);
-        DebugLog("selftest","\"room\":\"%s\",\"file\":%s,\"doors\":%d,\"levers\":%d,\"enemies\":%d,\"pickups\":%d,\"checkpoints\":%d",
-                 names[i], existed?"true":"false", g_doorN,g_leverN,g_enN,g_pkN,g_cpN);
+    static const char* paths[] = {
+        "levels/sunken_mines/entrance.lvl","levels/sunken_mines/shaft.lvl","levels/sunken_mines/cavern.lvl","levels/sunken_mines/depths.lvl",
+        "levels/the_mire/entrance.lvl","levels/the_mire/mire.lvl","levels/the_mire/sink.lvl",
+        "levels/the_ashlands/entrance.lvl","levels/the_ashlands/ash.lvl","levels/the_ashlands/forge.lvl",
+        "levels/the_usurpers_keep/entrance.lvl","levels/the_usurpers_keep/hall.lvl","levels/the_usurpers_keep/throne.lvl",
+    };
+    int NP=(int)(sizeof(paths)/sizeof(paths[0])), errors=0, totalDoors=0, totalShards=0, bosses=0;
+    static char dOwner[160][160], dTarget[160][48]; static int dSpawn[160]; int nd=0;
+    for(int i=0;i<NP;i++){ FILE*f=fopen(paths[i],"r"); if(!f){ DebugLog("selftest","\"error\":\"missing room\",\"path\":\"%s\"",JStr(paths[i])); errors++; continue; } fclose(f);
+        LoadRoom(paths[i],-1,0);
+        for(int k=0;k<g_pkN;k++) if(g_pk[k].kind=='*') totalShards++;
+        for(int k=0;k<g_enN;k++) if(g_en[k].type==3) bosses++;
+        DebugLog("selftest","\"room\":\"%s\",\"doors\":%d,\"enemies\":%d,\"pickups\":%d",JStr(paths[i]),g_doorN,g_enN,g_pkN);
+        for(int d=0;d<g_doorN;d++) if(nd<160){ snprintf(dOwner[nd],160,"%s",paths[i]); snprintf(dTarget[nd],48,"%s",g_doors[d].target); dSpawn[nd]=g_doors[d].targetSpawn; nd++; totalDoors++; }
     }
-    int errors=0;
-    for(int i=0;i<N;i++){ snprintf(path,sizeof path,"levels/sunken_mines/%s.lvl",names[i]); LoadRoom(path,-1,0);
-        for(int d=0;d<g_doorN;d++){ Door*D=&g_doors[d];
-            if(D->target[0]==0||!strcmp(D->target,"exit")) continue;
-            int t=-1; for(int k=0;k<N;k++) if(!strcmp(names[k],D->target)){ t=k; break; }
-            if(t<0){ DebugLog("selftest","\"error\":\"target room not found\",\"room\":\"%s\",\"door\":%d,\"target\":\"%s\"",names[i],D->id,JStr(D->target)); errors++; }
-            else if(!(mask[t]&(1<<D->targetSpawn))){ DebugLog("selftest","\"error\":\"target spawn door missing\",\"room\":\"%s\",\"door\":%d,\"target\":\"%s\",\"spawn\":%d",names[i],D->id,JStr(D->target),D->targetSpawn); errors++; }
-        }
+    for(int k=0;k<nd;k++){ if(dTarget[k][0]==0||!strcmp(dTarget[k],"exit")) continue;
+        char tp[220]; ResolveRoomPath(tp,sizeof tp,dOwner[k],dTarget[k]);
+        FILE*tf=fopen(tp,"r"); if(!tf){ DebugLog("selftest","\"error\":\"door target not found\",\"from\":\"%s\",\"target\":\"%s\"",JStr(dOwner[k]),JStr(dTarget[k])); errors++; continue; } fclose(tf);
+        LoadRoom(tp,-1,0); int found=0; for(int d=0;d<g_doorN;d++) if(g_doors[d].id==dSpawn[k]){ found=1; break; }
+        if(!found){ DebugLog("selftest","\"error\":\"spawn door missing\",\"target\":\"%s\",\"spawn\":%d",JStr(tp),dSpawn[k]); errors++; }
     }
-    DebugLog("selftest","\"done\":true,\"rooms\":%d,\"errors\":%d",N,errors);
-    fprintf(stderr,"selftest: %d rooms checked, %d errors\n",N,errors);
+    DebugLog("selftest","\"done\":true,\"rooms\":%d,\"doors\":%d,\"shards\":%d,\"bosses\":%d,\"errors\":%d",NP,totalDoors,totalShards,bosses,errors);
+    fprintf(stderr,"selftest: %d rooms, %d doors, %d shards, %d boss(es), %d errors\n",NP,totalDoors,totalShards,bosses,errors);
     return errors;
 }
 
 // ---- main -------------------------------------------------------------------
 int main(int argc,char**argv){
-    int dump=0;
+    int dump=0,docontinue=0; char pwarg[16]="";
     for(int i=1;i<argc;i++){
         if(!strcmp(argv[i],"--debug")) g_debug=1;
         else if(!strcmp(argv[i],"--no-enemies")) g_noEnemies=1;
@@ -948,8 +981,12 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--frames")&&i+1<argc) g_maxFrames=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--shot")&&i+1<argc) g_shotFrame=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--dumpsprites")) dump=1;
+        else if(!strcmp(argv[i],"--continue")) docontinue=1;
+        else if(!strcmp(argv[i],"--password")&&i+1<argc) snprintf(pwarg,sizeof pwarg,"%s",argv[++i]);
     }
     if(dump) return DumpSprites();   // export thorn-sprites.png and exit (no window)
+    if(pwarg[0]) for(unsigned k=0;k<sizeof(g_pwTable)/sizeof(g_pwTable[0]);k++) if(!strcmp(pwarg,g_pwTable[k].code)){ snprintf(g_roomStart,sizeof g_roomStart,"%s",g_pwTable[k].path); break; }
+    if(docontinue){ FILE*sf=fopen("thorn-save.txt","r"); if(sf){ char code[32]="",path[160]=""; if(fscanf(sf,"%31s %159s",code,path)==2 && path[0]) snprintf(g_roomStart,sizeof g_roomStart,"%s",path); fclose(sf); } }
     if(g_debug){ g_dbg=fopen("thorn-debug.log","w"); if(!g_dbg) g_dbg=stderr; }
     for(int i=0;i<MAXSHOT;i++) g_shot[i].age=-1;
 
@@ -970,7 +1007,7 @@ int main(int argc,char**argv){
         InitSprites();    // uploads generated textures; needs the GL context above
     }
 
-    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.5.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
+    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.6.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
     DebugLog("window","\"w\":%d,\"h\":%d,\"monitor\":%d",SCREEN_W,SCREEN_H,g_headless?0:GetCurrentMonitor());
 
     // New game: stats, then the first room (LoadRoom logs its own "level" event).

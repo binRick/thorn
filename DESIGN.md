@@ -5,9 +5,11 @@
 > `../Chernobyl`, `../Chernobyl2`, and `../uapd`, and emits a recurring **JSON
 > instrumentation log** so game state can be reconstructed after any bug.
 
-Status: **v0.5** — M2 complete plus original code-generated sprite art, a sampled
-shotgun SFX, and a **jump** (a deliberate divergence from Blackthorne; see §2).
-Detail below. (combat & items depth on top of the M1 area:
+Status: **v0.6 — M3 complete** — all four areas (Sunken Mines → the Mire → the
+Ashlands → the Usurper's Keep) linked end-to-end, a Daystone-shard gate, NPC
+gifts/hints, area passwords (save / `--continue`), and the **Maldrak boss**. On
+top of sprites, a sampled shotgun SFX, a **jump** (a divergence from Blackthorne;
+see §2), and M2 (combat & items depth on the M1 area:
 magazine/reserve ammo with auto-reload, shotgun power/speed upgrades, placed
 bombs that blow cracked walls, moving lifts that carry the player, three enemy
 types incl. cover-using and advancing AI, and procedural audio; full JSON
@@ -198,14 +200,19 @@ is an optional objective.
   Header directives (one per line, before the grid):
     @area  <name...>                         display area name
     @room  <name>                            display room name
-    @door  <id> <targetRoom> <targetSpawn> [lock <color>]
-           digit <id> in the grid is this door; on use it loads
-           <targetRoom>.lvl and spawns the player at that room's door
-           <targetSpawn>. "exit" as target clears the area. "lock <color>"
-           requires a key of that colour to pass.
+    @door  <id> <targetRoom> <targetSpawn> [lock <color> | shards <N>]
+           digit <id> in the grid is this door; on use it loads <targetRoom>.lvl
+           and spawns the player one tile inside that room's door <targetSpawn>.
+           targetRoom may be a relative path to cross areas, e.g.
+           "../the_mire/entrance" (M3). "exit" clears the area. "lock <color>"
+           needs a key; "shards <N>" is the Daystone gate - needs N shards (M3).
     @lift  <c> <r> <w> <v|h> <range> <period>   (M2) moving platform: a w-tile
            bar at tile (c,r) oscillating <range> tiles vertically/horizontally
            every <period> seconds; carries whoever stands on it.
+    @npc   <gift>                                (M3) gift for the next 'n':
+           ammo | key | bomb | hint <text...>  (shown on screen when freed)
+    @password <CODE>                            (M3) area-entrance code; on entry
+           it is shown + saved to thorn-save.txt (resume via --continue/--password)
     ;  comment line
 
   Grid legend:
@@ -218,6 +225,7 @@ is an optional objective.
     H  health pickup           *  Daystone shard
     g  SKARL (shooter)         G  BRUTE (advancing melee)        (M2)
     s  SENTRY (shoots, ducks into cover)                          (M2)
+    M  MALDRAK (boss; killing him wins the game)                  (M3)
     n  Aurithi NPC             L  lever (extends bridges)
     P  player spawn (first room / fallback)
 ```
@@ -430,8 +438,15 @@ incremental and instant when nothing changed.
   Verified by `--selftest` + headless captures, incl. `test_lift`/`test_bomb`
   rooms. (Thrown bombs and shotgun-upgrade *pickup variety* beyond u/U, plus
   flanking AI, remain for later polish.)
-- **M3 — NPCs & narrative.** Freed Aurithi, hints/passwords, the Daystone-shard
-  gate, area transitions, the four areas end-to-end.
+- **M3 — content & narrative. ✅ done.** All four areas authored and linked
+  end-to-end via cross-area doors (Sunken Mines → the Mire → the Ashlands → the
+  Usurper's Keep); the Daystone-shard gate (`@door … shards N`); freed Aurithi
+  give gifts/hints (`@npc`); area passwords shown + saved (`@password`,
+  thorn-save.txt, `--continue` / `--password CODE`); the **Maldrak boss** (enemy
+  type 3) whose death wins the game. Verified by `--selftest` (13 rooms, 24 doors,
+  0 errors) and a headless run that reaches all four areas + opens the gate; the
+  boss-death→victory path verified directly. *Known limitation:* picked-up shards
+  re-spawn if you re-enter a room (no global "collected" set yet) — a polish item.
 - **M4 — Polish (started).** Original pixel-art sprites for actors/tiles are in
   (generated in code; primitives remain as fallback); still to do: richer/larger
   sprite sets and animation, music, menus, options, and Linux/Web/iOS build

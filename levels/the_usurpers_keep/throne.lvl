@@ -1,9 +1,6 @@
-@area Sunken Mines
-@room depths
-; The deepest gallery and the way out of the mines. Three guards stand between
-; you and the east exit (which clears the area). West door back to the cavern.
-@door 0 cavern 1
-@door 1 ../the_mire/entrance 0
+@area The Usurper's Keep
+@room throne
+@door 0 hall 1
 ########################################
 #......................................#
 #......................................#
@@ -18,7 +15,7 @@
 #......................................#
 #......................................#
 #......................................#
-#0...g....H....G....a...s.......*.....1#
+#0...H...*...................M........#
 ########################################
 ########################################
 ########################################

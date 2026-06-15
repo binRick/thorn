@@ -5,9 +5,11 @@ on **raylib 6.0**. Weighty traversal (with a jump); a pump-shotgun that fires fo
 **and over the shoulder**; ducking into background **shadow alcoves** to let
 bullets pass. Original art, naming, and levels — see **[DESIGN.md](DESIGN.md)**.
 
-Status: **v0.5** — original sprite art, a sampled shotgun SFX, and a **jump**
-(`Space`), on top of: combat & items depth over the Sunken Mines
-area — magazine/reserve ammo with auto-reload, shotgun power/speed upgrades,
+Status: **v0.6 — M3 complete** — all four areas (Sunken Mines → the Mire → the
+Ashlands → the Usurper's Keep) linked end-to-end, a Daystone-shard gate, NPC
+gifts/hints, area passwords, and the **Maldrak boss**. On top of sprite art, a
+sampled shotgun SFX, a **jump** (`Space`), and combat & items depth over the
+Sunken Mines area — magazine/reserve ammo with auto-reload, shotgun power/speed upgrades,
 placed bombs that blow cracked walls, moving lifts that carry you, three enemy
 types (shooter / advancing brute / cover-using sentry), and procedural audio.
 Built on the M1 room graph (doors, keys/locked doors, lever→bridge, checkpoints).
@@ -58,11 +60,12 @@ jq -c 'select(.ev=="death" or .ev=="hit" or .ev=="fire")' thorn-debug.log
 ./debug.sh               # build + run, tee the log to /tmp for sharing
 ```
 
-Useful flags: `--headless` (run with no window — deterministic capture for
-CI/SSH), `--selftest` (validate the room graph), `--room PATH` / `--spawn ID`
+Useful flags: `--continue` (resume from the last saved area) / `--password CODE`
+(MINE/MIRE/ASH/KEEP), `--headless` (run with no window — deterministic capture for
+CI/SSH), `--selftest` (validate the whole room graph), `--room PATH` / `--spawn ID`
 (boot into a specific room/entrance), `--rate N` (snapshot cadence; `0` = every
 frame), `--frames N` (run N then quit), `--shot N` (screenshot at frame N),
-`--god`, `--no-enemies`, `--demo`.
+`--god`, `--no-enemies`, `--demo`, `--dumpsprites`.
 
 ## Layout
 

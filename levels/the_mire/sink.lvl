@@ -1,9 +1,8 @@
-@area Sunken Mines
-@room depths
-; The deepest gallery and the way out of the mines. Three guards stand between
-; you and the east exit (which clears the area). West door back to the cavern.
-@door 0 cavern 1
-@door 1 ../the_mire/entrance 0
+@area The Mire
+@room sink
+@door 0 mire 1
+@door 1 ../the_ashlands/entrance 0
+@npc 0 key
 ########################################
 #......................................#
 #......................................#
@@ -18,7 +17,7 @@
 #......................................#
 #......................................#
 #......................................#
-#0...g....H....G....a...s.......*.....1#
+#0...n..........G.......H.............1#
 ########################################
 ########################################
 ########################################
