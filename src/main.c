@@ -106,7 +106,7 @@ static const char *JStr(const char *s){
 
 // ---- Entities ---------------------------------------------------------------
 // type: 0=SKARL (stationary shooter) 1=BRUTE (advances) 2=SENTRY (uses cover)
-typedef struct { float x,y,vx,vy; int face; int hp; int alive; int type; int phase; int onGround; int inCover; float coverT; float fireT; float hitFlash; const char*st; } Enemy;
+typedef struct { float x,y,vx,vy; int face; int hp; int maxhp; int alive; int type; int phase; int onGround; int inCover; float coverT; float fireT; float hitFlash; const char*st; } Enemy;
 typedef struct { int c,r; char kind; int alive; } Pickup;     // H K B * a u U
 typedef struct { float x,y,vx,vy,fuse; int active; } Bomb;    // placed or thrown explosive
 typedef struct { int c,r; int freed; } Npc;
@@ -338,6 +338,7 @@ static void AddEnemy(int c, float feet, int type){
     if(g_enN>=MAXEN) return; Enemy*e=&g_en[g_enN++];
     e->x=c*TILE+(TILE-EW)/2; e->y=feet-EH; e->vx=e->vy=0; e->face=-1;
     e->type=type; e->hp = type==3?300 : type==1?110 : type==2?45 : E_HP;   // boss/brute tanky, sentry fragile
+    e->maxhp=e->hp;
     e->alive=1; e->phase=0; e->onGround=1; e->inCover=0; e->coverT=0;
     e->fireT=E_INTERVAL*0.5f; e->hitFlash=0; e->st="IDLE";
 }
@@ -1167,7 +1168,9 @@ static void DrawWorld(void){
             if(g_sEnemy[e->type].ok) DrawActorStrip(&g_sEnemy[e->type],AnimF(&g_sEnemy[e->type]),ax,ay,ew,eh,e->face,al,e->hitFlash>0);
             else DrawActorTex(g_tEnemy[e->type],ax,ay,ew,eh,e->face,al,e->hitFlash>0); }
         else { Color col = e->hitFlash>0?(Color){255,255,255,255} : e->type==1?(Color){150,55,55,255} : e->type==2?(Color){150,80,185,255} : (Color){200,70,70,255}; DrawFigure(e->x,e->y,EW,EH,e->face,col,0,e->face,e->inCover); }
-        if(!e->inCover){ int mh=e->type==3?300:e->type==1?110:e->type==2?45:E_HP; float bw=e->type==3?EW*1.7f:EW, bx=e->x+EW*0.5f-bw*0.5f; DrawRectangle((int)bx,(int)e->y-7,(int)bw,4,(Color){40,40,40,255}); DrawRectangle((int)bx,(int)e->y-7,(int)(bw*e->hp/(float)mh),4,e->type==3?(Color){230,90,90,255}:(Color){90,220,90,255}); }
+        if(!e->inCover && e->hp<e->maxhp){ float bw=e->type==3?EW*1.7f:EW, bx=e->x+EW*0.5f-bw*0.5f;   // bar only once damaged
+            DrawRectangle((int)bx,(int)e->y-7,(int)bw,4,(Color){40,40,40,255});
+            DrawRectangle((int)bx,(int)e->y-7,(int)(bw*e->hp/(float)e->maxhp),4,e->type==3?(Color){230,90,90,255}:(Color){90,220,90,255}); }
     }
     for(int i=0;i<MAXSHOT;i++){ Shot*s=&g_shot[i]; if(s->age<0||s->age>0.09f) continue; Color c=s->owner?(Color){255,150,60,255}:(Color){120,230,255,255}; DrawLineEx((Vector2){s->x1,s->y1},(Vector2){s->x2,s->y2},3,c); }
     for(int i=0;i<MAXBOMB;i++) if(g_bomb[i].active){ Bomb*b=&g_bomb[i]; DrawCircle((int)b->x,(int)b->y-6,9,(Color){40,40,46,255}); int blink=((int)(b->fuse*8))&1; DrawCircle((int)b->x,(int)b->y-16,3,blink?(Color){255,80,60,255}:(Color){110,40,30,255}); }
