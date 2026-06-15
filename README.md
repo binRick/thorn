@@ -19,6 +19,11 @@ A **visual FX layer** adds dynamic lighting + vignette, parallax backgrounds,
 particles (sparks/blood/smoke/embers) and screen-shake — toggle with `F` or
 `--nofx`. All original techniques (no copyrighted assets).
 
+**Drop-in sprites:** actors load animated PNG strips from `assets/sprites/`
+(falling back to the generated art if absent). The bundled set is original and
+**CC0** — regenerate it with `--gen-assets`, or **reskin** by replacing those
+PNGs with your own / any CC0 pack (same filenames). See `assets/sprites/CREDITS.txt`.
+
 ## Run
 
 ```bash
@@ -68,7 +73,8 @@ Useful flags: `--continue` (resume from the last saved area) / `--password CODE`
 CI/SSH), `--selftest` (validate the whole room graph), `--room PATH` / `--spawn ID`
 (boot into a specific room/entrance), `--rate N` (snapshot cadence; `0` = every
 frame), `--frames N` (run N then quit), `--shot N` (screenshot at frame N),
-`--god`, `--no-enemies`, `--demo`, `--dumpsprites`, `--nofx` (disable visual FX).
+`--god`, `--no-enemies`, `--demo`, `--dumpsprites`, `--gen-assets` (regenerate the
+CC0 sprite PNGs), `--nofx` (disable visual FX).
 
 ## Layout
 
@@ -76,7 +82,8 @@ frame), `--frames N` (run N then quit), `--shot N` (screenshot at frame N),
 run.sh debug.sh Makefile   entry points + build (Makefile `raylib6` vendors raylib 6.0)
 DESIGN.md README.md         design doc + this file
 src/main.c                  the game (single translation unit)
-levels/sunken_mines/*.lvl   the first area's rooms (external level files)
+levels/<area>/*.lvl         room files for the four areas (external level data)
+assets/sprites/*.png        drop-in CC0 sprite strips (reskin by replacing these)
 vendor/                     vendored raylib 6.0 (gitignored, rebuilt on demand)
 ```
 

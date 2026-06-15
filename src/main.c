@@ -795,6 +795,15 @@ static Image ImgBridge(void){
 
 static Texture2D g_tHeroIdle,g_tHeroWalk,g_tEnemy[4],g_tStone,g_tCrack,g_tBridge;
 static int g_sprites=0;
+// Drop-in sprite strips: external PNGs in assets/sprites/ (horizontal frame
+// strips). Loaded if present, else the generated art is the fallback.
+typedef struct { Texture2D tex; int frames; int ok; } Strip;
+static Strip g_sHeroIdle,g_sHeroWalk,g_sEnemy[4];
+static Strip LoadStrip(const char*path,int frames){
+    Strip s; s.tex=(Texture2D){0}; s.frames=frames<1?1:frames; s.ok=0;
+    if(FileExists(path)){ s.tex=LoadTexture(path); if(s.tex.id>0){ SetTextureFilter(s.tex,TEXTURE_FILTER_POINT); s.ok=1; } }
+    return s;
+}
 static void InitSprites(void){
     Image im;
     im=ImgFromAscii(SPR_HERO_IDLE,SPR_ROWS,(Color){92,150,235,255}); g_tHeroIdle=LoadTextureFromImage(im); UnloadImage(im);
@@ -812,6 +821,13 @@ static void InitSprites(void){
     { int W=SCREEN_W/6,H=SCREEN_H/6; Image im2=GenImageColor(W,H,(Color){0,0,0,0});   // vignette
       for(int y=0;y<H;y++) for(int x=0;x<W;x++){ float dx=(x-W/2)/(float)(W/2),dy=(y-H/2)/(float)(H/2),d=sqrtf(dx*dx+dy*dy),v=(d-0.62f)/0.5f; if(v<0)v=0; if(v>1)v=1; ImageDrawPixel(&im2,x,y,(Color){0,0,0,(unsigned char)(v*175)}); }
       g_tVign=LoadTextureFromImage(im2); SetTextureFilter(g_tVign,TEXTURE_FILTER_BILINEAR); UnloadImage(im2); }
+    // Drop-in sprite strips (override the generated art if the PNGs are present).
+    g_sHeroIdle=LoadStrip("assets/sprites/hero_idle.png",1);
+    g_sHeroWalk=LoadStrip("assets/sprites/hero_walk.png",2);
+    g_sEnemy[0]=LoadStrip("assets/sprites/skarl.png",1);
+    g_sEnemy[1]=LoadStrip("assets/sprites/brute.png",1);
+    g_sEnemy[2]=LoadStrip("assets/sprites/sentry.png",1);
+    g_sEnemy[3]=LoadStrip("assets/sprites/maldrak.png",1);
     g_sprites=1;
 }
 // Export the sprites to a PNG (no window needed) for visual review.
@@ -831,12 +847,38 @@ static int DumpSprites(void){
     ExportImage(sheet,"thorn-sprites.png"); UnloadImage(sheet);
     printf("wrote thorn-sprites.png\n"); return 0;
 }
+// Generate the bundled (original, CC0) sprite strips into assets/sprites/ — these
+// are what the drop-in loader reads; replace them with any CC0 pack to reskin.
+static int GenAssets(void){
+    Image hi=ImgFromAscii(SPR_HERO_IDLE,SPR_ROWS,(Color){92,150,235,255});
+    ExportImage(hi,"assets/sprites/hero_idle.png");
+    Image hw=ImgFromAscii(SPR_HERO_WALK,SPR_ROWS,(Color){92,150,235,255});
+    Image strip=GenImageColor(hi.width*2,hi.height,(Color){0,0,0,0});   // 2-frame walk strip
+    ImageDraw(&strip,hi,(Rectangle){0,0,(float)hi.width,(float)hi.height},(Rectangle){0,0,(float)hi.width,(float)hi.height},WHITE);
+    ImageDraw(&strip,hw,(Rectangle){0,0,(float)hw.width,(float)hw.height},(Rectangle){(float)hi.width,0,(float)hw.width,(float)hw.height},WHITE);
+    ExportImage(strip,"assets/sprites/hero_walk.png");
+    UnloadImage(strip); UnloadImage(hw); UnloadImage(hi);
+    const char*ef[4]={"skarl","brute","sentry","maldrak"};
+    Color ec[4]={{200,72,72,255},{170,70,60,255},{156,90,196,255},{164,44,64,255}};
+    for(int i=0;i<4;i++){ char p[128]; snprintf(p,sizeof p,"assets/sprites/%s.png",ef[i]); Image g=ImgFromAscii(SPR_GUARD,SPR_ROWS,ec[i]); ExportImage(g,p); UnloadImage(g); }
+    printf("wrote assets/sprites/*.png\n"); return 0;
+}
 // Draw an actor texture into AABB (ax,ay,aw,ah), feet-aligned, flipped by face.
 static void DrawActorTex(Texture2D t,float ax,float ay,float aw,float ah,int face,float alpha,int flash){
     float scale=ah/(float)t.height, dw=t.width*scale;
     Rectangle src={0,0,(float)(face>0?t.width:-t.width),(float)t.height};
     Rectangle dst={ax+aw*0.5f-dw*0.5f, ay+ah-(t.height*scale), dw, t.height*scale};
     DrawTexturePro(t,src,dst,(Vector2){0,0},0,(Color){255,255,255,(unsigned char)(alpha*255)});
+    if(flash) DrawRectangleRec(dst,(Color){255,255,255,150});
+}
+
+// Draw one frame of a sprite strip into the actor AABB (see Strip above).
+static void DrawActorStrip(Strip*s,int frame,float ax,float ay,float aw,float ah,int face,float alpha,int flash){
+    int fw=s->tex.width/s->frames; if(s->frames>1) frame%=s->frames; else frame=0;
+    float scale=ah/(float)s->tex.height, dw=fw*scale;
+    Rectangle src={(float)(frame*fw),0,(float)(face>0?fw:-fw),(float)s->tex.height};
+    Rectangle dst={ax+aw*0.5f-dw*0.5f, ay+ah-(s->tex.height*scale), dw, s->tex.height*scale};
+    DrawTexturePro(s->tex,src,dst,(Vector2){0,0},0,(Color){255,255,255,(unsigned char)(alpha*255)});
     if(flash) DrawRectangleRec(dst,(Color){255,255,255,150});
 }
 
@@ -932,7 +974,9 @@ static void DrawWorld(void){
     }
     for(int i=0;i<g_npcN;i++){ Npc*n=&g_npc[i]; float x=n->c*TILE+(TILE-EW)/2,y=(n->r+1)*TILE-EH; DrawFigure(x,y,EW,EH,1,n->freed?(Color){120,200,140,255}:(Color){150,150,160,255},0,1,0); }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive){ DrawRectangle((int)e->x,(int)(e->y+EH-8),(int)EW,8,(Color){90,30,30,200}); continue; }
-        if(g_sprites){ float sc=e->type==3?1.7f:e->type==1?1.14f:1.0f, eh=EH*sc, ew=EW*sc; DrawActorTex(g_tEnemy[e->type],e->x+EW*0.5f-ew*0.5f,e->y+EH-eh,ew,eh,e->face,e->inCover?0.45f:1.0f,e->hitFlash>0); }
+        if(g_sprites){ float sc=e->type==3?1.7f:e->type==1?1.14f:1.0f, eh=EH*sc, ew=EW*sc, ax=e->x+EW*0.5f-ew*0.5f, ay=e->y+EH-eh, al=e->inCover?0.45f:1.0f;
+            if(g_sEnemy[e->type].ok) DrawActorStrip(&g_sEnemy[e->type],0,ax,ay,ew,eh,e->face,al,e->hitFlash>0);
+            else DrawActorTex(g_tEnemy[e->type],ax,ay,ew,eh,e->face,al,e->hitFlash>0); }
         else { Color col = e->hitFlash>0?(Color){255,255,255,255} : e->type==1?(Color){150,55,55,255} : e->type==2?(Color){150,80,185,255} : (Color){200,70,70,255}; DrawFigure(e->x,e->y,EW,EH,e->face,col,0,e->face,e->inCover); }
         if(!e->inCover){ int mh=e->type==3?300:e->type==1?110:e->type==2?45:E_HP; float bw=e->type==3?EW*1.7f:EW, bx=e->x+EW*0.5f-bw*0.5f; DrawRectangle((int)bx,(int)e->y-7,(int)bw,4,(Color){40,40,40,255}); DrawRectangle((int)bx,(int)e->y-7,(int)(bw*e->hp/(float)mh),4,e->type==3?(Color){230,90,90,255}:(Color){90,220,90,255}); }
     }
@@ -940,7 +984,10 @@ static void DrawWorld(void){
     for(int i=0;i<MAXBOMB;i++) if(g_bomb[i].active){ Bomb*b=&g_bomb[i]; DrawCircle((int)b->x,(int)b->y-6,9,(Color){40,40,46,255}); int blink=((int)(b->fuse*8))&1; DrawCircle((int)b->x,(int)b->y-16,3,blink?(Color){255,80,60,255}:(Color){110,40,30,255}); }
     if(g_boomT>0){ float k=1.0f-(g_boomT/0.35f); float rad=BOMB_RADIUS*k; DrawCircleLines((int)g_boomX,(int)g_boomY,rad,(Color){255,180,60,(unsigned char)(220*(1-k))}); DrawCircle((int)g_boomX,(int)g_boomY,rad*0.5f,(Color){255,140,40,(unsigned char)(120*(1-k))}); }
     if(!P.dead){
-        if(g_sprites){ float a=P.inCover?0.5f:(P.iframes>0?0.5f:1.0f); int moving=fabsf(P.vx)>5; Texture2D ht=(moving && ((int)(GetTime()*8)&1))?g_tHeroWalk:g_tHeroIdle; DrawActorTex(ht,P.x,P.y,PW,PH,P.face,a,0);
+        if(g_sprites){ float a=P.inCover?0.5f:(P.iframes>0?0.5f:1.0f); int moving=fabsf(P.vx)>5;
+            if(moving && g_sHeroWalk.ok) DrawActorStrip(&g_sHeroWalk,(int)(GetTime()*8),P.x,P.y,PW,PH,P.face,a,0);
+            else if(g_sHeroIdle.ok) DrawActorStrip(&g_sHeroIdle,0,P.x,P.y,PW,PH,P.face,a,0);
+            else { Texture2D ht=(moving && ((int)(GetTime()*8)&1))?g_tHeroWalk:g_tHeroIdle; DrawActorTex(ht,P.x,P.y,PW,PH,P.face,a,0); }
             if(P.muzzle>0) DrawCircle((int)(P.muzzleDir>0?P.x+PW+6:P.x-6),(int)(P.y+PH*0.42f+2),8,(Color){255,230,120,235}); }
         else { Color pc = P.iframes>0?(Color){255,255,255,255}:(Color){90,150,235,255}; DrawFigure(P.x,P.y,PW,PH,P.face,pc,P.muzzle>0,P.muzzleDir,P.inCover); }
     } else DrawRectangle((int)P.x,(int)(P.y+PH-8),(int)PW,8,(Color){120,40,40,220});
@@ -1044,7 +1091,7 @@ static int RunSelfTest(void){
 
 // ---- main -------------------------------------------------------------------
 int main(int argc,char**argv){
-    int dump=0,docontinue=0; char pwarg[16]="";
+    int dump=0,genassets=0,docontinue=0; char pwarg[16]="";
     for(int i=1;i<argc;i++){
         if(!strcmp(argv[i],"--debug")) g_debug=1;
         else if(!strcmp(argv[i],"--no-enemies")) g_noEnemies=1;
@@ -1058,11 +1105,13 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--frames")&&i+1<argc) g_maxFrames=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--shot")&&i+1<argc) g_shotFrame=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--dumpsprites")) dump=1;
+        else if(!strcmp(argv[i],"--gen-assets")) genassets=1;
         else if(!strcmp(argv[i],"--nofx")) g_fx=0;
         else if(!strcmp(argv[i],"--continue")) docontinue=1;
         else if(!strcmp(argv[i],"--password")&&i+1<argc) snprintf(pwarg,sizeof pwarg,"%s",argv[++i]);
     }
     if(dump) return DumpSprites();   // export thorn-sprites.png and exit (no window)
+    if(genassets) return GenAssets();   // (re)generate assets/sprites/*.png and exit
     if(pwarg[0]) for(unsigned k=0;k<sizeof(g_pwTable)/sizeof(g_pwTable[0]);k++) if(!strcmp(pwarg,g_pwTable[k].code)){ snprintf(g_roomStart,sizeof g_roomStart,"%s",g_pwTable[k].path); break; }
     if(docontinue){ FILE*sf=fopen("thorn-save.txt","r"); if(sf){ char code[32]="",path[160]=""; if(fscanf(sf,"%31s %159s",code,path)==2 && path[0]) snprintf(g_roomStart,sizeof g_roomStart,"%s",path); fclose(sf); } }
     if(g_debug){ g_dbg=fopen("thorn-debug.log","w"); if(!g_dbg) g_dbg=stderr; }
@@ -1085,7 +1134,7 @@ int main(int argc,char**argv){
         InitSprites();    // uploads generated textures; needs the GL context above
     }
 
-    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.7.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
+    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.8.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
     DebugLog("window","\"w\":%d,\"h\":%d,\"monitor\":%d",SCREEN_W,SCREEN_H,g_headless?0:GetCurrentMonitor());
 
     // New game: stats, then the first room (LoadRoom logs its own "level" event).

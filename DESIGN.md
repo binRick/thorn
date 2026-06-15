@@ -450,9 +450,13 @@ incremental and instant when nothing changed.
 - **M4 — Polish (in progress).** Original pixel-art sprites + a visual FX layer
   are in: dynamic 2D lighting (additive glow + vignette + per-area colour grade),
   parallax backgrounds, a particle system (sparks/blood/smoke/embers/casings) and
-  screen-shake juice (all original, no GLSL; `F` / `--nofx` toggles). Still to do:
-  richer/larger sprites + more animation, optional shader bloom/CRT, persistent
-  shard collection, music, menus, and Linux/Web/iOS build parity.
+  screen-shake juice (all original, no GLSL; `F` / `--nofx` toggles). A **drop-in
+  sprite pipeline** loads animated PNG strips from `assets/sprites/` (with a
+  bundled, original **CC0** set generated via `--gen-assets`; falls back to the
+  in-code art) so the game can be reskinned with any CC0 pack by replacing files.
+  Still to do: higher-fidelity sprite atlases + more animation frames, optional
+  shader bloom/CRT, persistent shard collection, music, menus, and Linux/Web/iOS
+  build parity.
 
 ## 9. Risks & open questions
 - **Climb feel** is the hardest thing to make non-fiddly without a jump button;
