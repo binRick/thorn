@@ -711,7 +711,14 @@ static void UpdateEnemies(void){
             if(!g_noEnemies && aggro && fabsf(dx)<TILE*0.9f && fabsf(pcy()-ey)<TILE*0.9f) HurtPlayer(e->type==3?18:12,"melee");
         }
 
-        e->st = e->inCover?"COVER" : (aggro?"AIM":"IDLE");
+        if((e->type==0||e->type==2) && !e->inCover){   // SKARL/SENTRY: pace when idle (turn at walls/ledges)
+            if(e->face==0) e->face=1;
+            if(!aggro){ int fr=(int)floorf((e->y+EH+1)/TILE); int ah=e->face>0?(int)floorf((e->x+EW+2)/TILE):(int)floorf((e->x-2)/TILE);
+                if(SolidAt(ah,fr-1)||!SolidAt(ah,fr)) e->face=-e->face; e->vx=e->face*45.0f; }
+            else e->vx=0;
+            EnemyMove(e);
+        }
+        e->st = e->inCover?"COVER" : (aggro?"AIM": (fabsf(e->vx)>5?"PATROL":"IDLE"));
         if(g_noEnemies) continue;
 
         // Ranged fire (SKARL + SENTRY; brute is melee-only).
