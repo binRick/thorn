@@ -106,7 +106,7 @@ static const char *JStr(const char *s){
 
 // ---- Entities ---------------------------------------------------------------
 // type: 0=SKARL (stationary shooter) 1=BRUTE (advances) 2=SENTRY (uses cover)
-typedef struct { float x,y,vx,vy; int face; int hp; int alive; int type; int onGround; int inCover; float coverT; float fireT; float hitFlash; const char*st; } Enemy;
+typedef struct { float x,y,vx,vy; int face; int hp; int alive; int type; int phase; int onGround; int inCover; float coverT; float fireT; float hitFlash; const char*st; } Enemy;
 typedef struct { int c,r; char kind; int alive; } Pickup;     // H K B * a u U
 typedef struct { float x,y,fuse; int active; } Bomb;          // placed explosive
 typedef struct { int c,r; int freed; } Npc;
@@ -324,7 +324,7 @@ static void AddEnemy(int c, float feet, int type){
     if(g_enN>=MAXEN) return; Enemy*e=&g_en[g_enN++];
     e->x=c*TILE+(TILE-EW)/2; e->y=feet-EH; e->vx=e->vy=0; e->face=-1;
     e->type=type; e->hp = type==3?300 : type==1?110 : type==2?45 : E_HP;   // boss/brute tanky, sentry fragile
-    e->alive=1; e->onGround=1; e->inCover=0; e->coverT=0;
+    e->alive=1; e->phase=0; e->onGround=1; e->inCover=0; e->coverT=0;
     e->fireT=E_INTERVAL*0.5f; e->hitFlash=0; e->st="IDLE";
 }
 
@@ -702,7 +702,9 @@ static void UpdateEnemies(void){
         if(e->type==2 && e->inCover){ e->coverT-=DT; if(e->coverT<=0){ e->inCover=0; DebugLog("cover","\"who\":\"enemy\",\"i\":%d,\"in\":false",i); } }
 
         if(e->type==1 || e->type==3){   // BRUTE/BOSS: advance toward the player, melee on contact
-            e->vx = (aggro && fabsf(dx)>TILE*0.9f) ? (dx>0?1:-1)*(e->type==3?95.0f:120.0f) : 0;
+            if(e->type==3 && e->hp<120 && !e->phase){ e->phase=1; g_shake=fmaxf(g_shake,14.0f); DebugLog("enrage","\"i\":%d",i); Ev("MALDRAK enrages!"); }   // phase 2
+            float spd = e->type==3 ? (e->phase?150.0f:95.0f) : 120.0f;
+            e->vx = (aggro && fabsf(dx)>TILE*0.9f) ? (dx>0?1:-1)*spd : 0;
             EnemyMove(e);
             if(e->y>g_H*TILE+120){ e->alive=0; continue; }   // fell out
             ex=e->x+EW*0.5f; ey=e->y+EH*0.5f; dx=pcx()-ex;
@@ -714,7 +716,7 @@ static void UpdateEnemies(void){
 
         // Ranged fire (SKARL + SENTRY; brute is melee-only).
         if(e->type!=1 && !e->inCover && e->fireT<=0 && aggro && (dx*e->face)>0 && !P.dead){
-            e->fireT = e->type==2?1.2f : e->type==3?0.9f : E_INTERVAL;
+            e->fireT = e->type==2?1.2f : e->type==3?(e->phase?0.55f:0.9f) : E_INTERVAL;
             float mx=e->face>0?e->x+EW:e->x, my=ey, endx=mx+e->face*E_RANGE;
             SpawnShot(mx,my,endx,my,1); SndPlay(SND_ENEMYFIRE);
             DebugLog("enemyfire","\"i\":%d,\"type\":%d,\"x\":%.1f,\"y\":%.1f,\"dir\":%d",i,e->type,mx,my,e->face);
