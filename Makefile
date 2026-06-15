@@ -78,6 +78,7 @@ web: $(SRC) src/shell.html $(RAYLIB_WEB)
 	  -Wno-unused-parameter -Wno-missing-field-initializers \
 	  -I$(RAYLIB_SRC) $(RAYLIB_WEB) \
 	  -s USE_GLFW=3 -s ALLOW_MEMORY_GROWTH=1 -s FORCE_FILESYSTEM=1 \
+	  -s STACK_SIZE=4194304 \
 	  --preload-file levels --preload-file assets \
 	  --shell-file src/shell.html
 	@echo "built $(WEB_OUT)/thorn.html — serve with:  python3 -m http.server -d $(WEB_OUT)"

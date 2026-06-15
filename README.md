@@ -98,6 +98,22 @@ frame), `--frames N` (run N then quit), `--shot N` (screenshot at frame N),
 CC0 sprite PNGs), `--nofx` (disable visual FX), `--skiptitle` (skip the menu),
 `--diff N` (0 Easy / 1 Normal / 2 Hard; also set with Left/Right on the title).
 
+## Releasing
+
+> **On every new version, update the web (WebAssembly) build too.** The desktop
+> and web targets share one `src/main.c`, and the web bundle does **not**
+> regenerate itself — a release that skips it leaves the play-in-browser version
+> stale.
+
+Release checklist:
+
+1. Bump the version in **three** places: `VERSION`, the `"build":"x.y.z"` boot
+   string in `src/main.c`, and the README status line.
+2. `make all && make test` — desktop build clean + regression green.
+3. **`make web`** — rebuild `build/web/thorn.{html,js,wasm,data}`.
+4. **Deploy `build/web/` to the website** (the "asm" / play-in-browser version)
+   so the hosted build matches the release.
+
 ## Layout
 
 ```
