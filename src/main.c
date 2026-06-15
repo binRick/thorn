@@ -270,6 +270,20 @@ static int LineClear(float x1,float x2,float y){
     return 1;
 }
 
+// Canonicalize a path (collapse "a/b/../c" -> "a/c") so the same room reached by
+// different relative paths shares one key for the collected-set + checkpoints.
+static void NormalizePath(char*out,size_t n,const char*in){
+    char tmp[256]; snprintf(tmp,sizeof tmp,"%s",in);
+    const char* parts[80]; int np=0; char* tok=strtok(tmp,"/");
+    while(tok){ if(!strcmp(tok,".")){} else if(!strcmp(tok,"..")){ if(np>0&&strcmp(parts[np-1],"..")) np--; else parts[np++]=tok; } else parts[np++]=tok; tok=strtok(NULL,"/"); }
+    out[0]=0; for(int i=0;i<np;i++){ if(i&&strlen(out)<n-1) strncat(out,"/",n-strlen(out)-1); strncat(out,parts[i],n-strlen(out)-1); }
+}
+// One-time pickups/NPCs: remember (room,cell) so they don't respawn on re-entry.
+#define MAXCOLL 256
+static struct { char room[80]; int c,r; } g_coll[MAXCOLL]; static int g_collN=0;
+static int  IsCollected(const char*room,int c,int r){ for(int i=0;i<g_collN;i++) if(g_coll[i].c==c&&g_coll[i].r==r&&!strcmp(g_coll[i].room,room)) return 1; return 0; }
+static void MarkCollected(const char*room,int c,int r){ if(g_collN<MAXCOLL&&!IsCollected(room,c,r)){ snprintf(g_coll[g_collN].room,80,"%s",room); g_coll[g_collN].c=c; g_coll[g_collN].r=r; g_collN++; } }
+
 static void ResolveRoomPath(char*out,size_t n,const char*base,const char*target){
     char dir[160]; snprintf(dir,sizeof dir,"%s",base);
     char*s=strrchr(dir,'/'); if(s)*s=0; else snprintf(dir,sizeof dir,".");
@@ -365,8 +379,8 @@ static void ParseRoom(const char*text,int spawnDoor){
                 case 'G': AddEnemy(c,feet,1); break;   // BRUTE: advancing melee
                 case 's': AddEnemy(c,feet,2); break;   // SENTRY: shoots, then ducks into cover
                 case 'M': AddEnemy(c,feet,3); break;   // MALDRAK: the boss
-                case 'n': if(g_npcN<MAXNPC) g_npc[g_npcN++]=(Npc){c,r,0}; break;
-                case 'H': case 'B': case '*': case 'K': case 'a': case 'u': case 'U': if(g_pkN<MAXPK) g_pk[g_pkN++]=(Pickup){c,r,t,1}; break;
+                case 'n': if(g_npcN<MAXNPC) g_npc[g_npcN++]=(Npc){c,r,IsCollected(g_roomPath,c,r)?1:0}; break;
+                case 'H': case 'B': case '*': case 'K': case 'a': case 'u': case 'U': if(g_pkN<MAXPK && !IsCollected(g_roomPath,c,r)) g_pk[g_pkN++]=(Pickup){c,r,t,1}; break;
                 case 'L': if(g_leverN<MAXLEVER) g_levers[g_leverN++]=(Lever){c,r}; break;
                 case '0':case '1':case '2':case '3':case '4':case '5':case '6':case '7':case '8':case '9':{
                     int id=t-'0'; if(g_doorN<MAXDOOR){ Door*D=&g_doors[g_doorN++]; D->c=c; D->r=r; D->id=id;
@@ -390,10 +404,10 @@ static void ParseRoom(const char*text,int spawnDoor){
 
 static void LoadRoom(const char*path,int spawnDoor,int setCheckpoint){
     static char buf[1<<15];
+    NormalizePath(g_roomPath,sizeof g_roomPath,path);   // canonical key (set before parse)
     FILE*f=fopen(path,"r");
     if(f){ size_t n=fread(buf,1,sizeof buf-1,f); buf[n]=0; fclose(f); ParseRoom(buf,spawnDoor); }
     else { ParseRoom(FALLBACK_ROOM,spawnDoor); DebugLog("warn","\"msg\":\"room file missing; using fallback\",\"path\":\"%s\"",JStr(path)); }
-    snprintf(g_roomPath,sizeof g_roomPath,"%s",path);
     if(setCheckpoint){ snprintf(g_cpPath,sizeof g_cpPath,"%s",g_roomPath); g_cpX=P.x; g_cpY=P.y; g_cpFace=P.face; }
     DebugLog("level","\"area\":\"%s\",\"room\":\"%s\",\"w\":%d,\"h\":%d,\"enemies\":%d,\"doors\":%d,\"pickups\":%d,\"levers\":%d",
              JStr(g_areaName),JStr(g_roomName),g_W,g_H,g_enN,g_doorN,g_pkN,g_leverN);
@@ -567,7 +581,7 @@ static void UpdatePlayer(Input in){
             }
         }
         if(!handled){
-            int didNpc=0; for(int i=0;i<g_npcN;i++) if(!g_npc[i].freed && pcol==g_npc[i].c){ g_npc[i].freed=1; didNpc=1; SndPlay(SND_PICKUP);
+            int didNpc=0; for(int i=0;i<g_npcN;i++) if(!g_npc[i].freed && pcol==g_npc[i].c){ g_npc[i].freed=1; didNpc=1; MarkCollected(g_roomPath,g_npc[i].c,g_npc[i].r); SndPlay(SND_PICKUP);
                 const char*gift = g_npcGift[i][0]?g_npcGift[i]:"ammo";
                 if(!strncmp(gift,"hint",4)) Msg(3.5f,"%s", gift[4]?gift+5:"...");
                 else if(!strcmp(gift,"key")){ KeyAdd("gold"); P.keys=KeyTotal(); Msg(2.0f,"The Aurithi gives you a gold key"); }
@@ -614,7 +628,7 @@ static void UpdatePlayer(Input in){
     if(P.onGround && feetRow>=0 && ccol>=0 && g_spike[feetRow][ccol]) HurtPlayer(SPIKE_DMG,"spike");
     if(P.y>g_H*TILE+80){ DebugLog("fall","\"fatal\":true"); if(g_god) RespawnAtCheckpoint(); else { P.hp=0; P.dead=1; P.deadT=0; DebugLog("death","\"who\":\"player\",\"cause\":\"pit\""); Ev("fell into the void"); } return; }
 
-    for(int i=0;i<g_pkN;i++){ Pickup*p=&g_pk[i]; if(!p->alive) continue; if(p->c==ccol && p->r==feetRow){ p->alive=0;
+    for(int i=0;i<g_pkN;i++){ Pickup*p=&g_pk[i]; if(!p->alive) continue; if(p->c==ccol && p->r==feetRow){ p->alive=0; MarkCollected(g_roomPath,p->c,p->r);
         const char*nm="";
         switch(p->kind){ case 'H': P.hp=P.hp+30>P_HP_MAX?P_HP_MAX:P.hp+30; nm="health"; break;
                          case 'K': KeyAdd("gold"); P.keys=KeyTotal(); nm="gold key"; break;

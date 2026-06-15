@@ -445,8 +445,8 @@ incremental and instant when nothing changed.
   thorn-save.txt, `--continue` / `--password CODE`); the **Maldrak boss** (enemy
   type 3) whose death wins the game. Verified by `--selftest` (13 rooms, 24 doors,
   0 errors) and a headless run that reaches all four areas + opens the gate; the
-  boss-death→victory path verified directly. *Known limitation:* picked-up shards
-  re-spawn if you re-enter a room (no global "collected" set yet) — a polish item.
+  boss-death→victory path verified directly. (Pickups/NPCs are now one-time: a
+  canonical-path collected-set stops them respawning on room re-entry.)
 - **M4 — Polish (in progress).** Original pixel-art sprites + a visual FX layer
   are in: dynamic 2D lighting (additive glow + vignette + per-area colour grade),
   parallax backgrounds, a particle system (sparks/blood/smoke/embers/casings) and
