@@ -147,10 +147,12 @@ typedef struct { float x,y,vx,vy,life,max,size; unsigned char r,g,b; int add,gra
 static Part g_part[MAXPART]; static int g_partHead=0;
 static int   g_fx=1; static float g_shake=0;
 static Texture2D g_tLight, g_tVign;   // soft radial light + vignette (built in InitSprites)
-typedef struct { float x,y,life; char s[16]; } FloatTxt;   // rising pickup labels
+typedef struct { float x,y,life; int kind; char s[16]; } FloatTxt;   // rising labels: kind 0=pickup, 1=damage
 #define MAXFLOATTXT 16
 static FloatTxt g_float[MAXFLOATTXT]; static int g_floatHead=0;
-static void FloatSpawn(float x,float y,const char*s){ if(!g_fx||g_headless) return; FloatTxt*f=&g_float[g_floatHead]; g_floatHead=(g_floatHead+1)%MAXFLOATTXT; f->x=x; f->y=y; f->life=1.1f; snprintf(f->s,sizeof f->s,"%s",s); }
+static void FloatPush(float x,float y,int kind,const char*s){ if(!g_fx||g_headless) return; FloatTxt*f=&g_float[g_floatHead]; g_floatHead=(g_floatHead+1)%MAXFLOATTXT; f->x=x; f->y=y; f->life=1.1f; f->kind=kind; snprintf(f->s,sizeof f->s,"%s",s); }
+static void FloatSpawn(float x,float y,const char*s){ FloatPush(x,y,0,s); }
+static void FloatDmg(float x,float y,int dmg){ FloatPush(x,y,1,TextFormat("%d",dmg)); }
 static void Emit(float x,float y,int n,float spd,float life,float size,Color c,int add,int grav){
     if(!g_fx||g_headless) return;
     for(int k=0;k<n;k++){ Part*p=&g_part[g_partHead]; g_partHead=(g_partHead+1)%MAXPART;
@@ -518,7 +520,7 @@ static void Fire(int dir){
     float endx = mx + dir*(hitIdx>=0?best:P_RANGE);
     SpawnShot(mx,my,endx,my,0);
     Emit(mx,my,7,360,0.16f,2.2f,(Color){255,220,130,255},1,0); Emit(P.x+PW*0.5f,gunY(),1,110,0.6f,1.6f,(Color){210,180,90,255},0,1);   // muzzle sparks + shell casing
-    if(hitIdx>=0){ Enemy*e=&g_en[hitIdx]; e->hp-=dmg; e->hitFlash=0.12f;
+    if(hitIdx>=0){ Enemy*e=&g_en[hitIdx]; e->hp-=dmg; e->hitFlash=0.12f; FloatDmg(e->x+EW*0.5f,e->y,dmg);
         if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); Emit(e->x+EW*0.5f,e->y+EH*0.5f,16,300,0.6f,2.6f,(Color){170,30,30,255},0,1); g_shake=fmaxf(g_shake,7.0f); Ev("enemy %d killed",hitIdx); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"x\":%.1f,\"y\":%.1f",hitIdx,e->x,e->y); if(e->type==3){ g_victory=1; g_won=1; g_shake=20.0f; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
         else { SndPlay(SND_HIT); Emit(e->x+EW*0.5f,e->y+EH*0.5f,7,240,0.35f,2.0f,(Color){200,40,40,255},0,1); DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":%d,\"hp\":%d",hitIdx,dmg,e->hp); }
     }
@@ -544,7 +546,7 @@ static void Melee(void){
     int hit=-1;
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive||e->inCover) continue; float ex=e->x+EW*0.5f, ey=e->y+EH*0.5f;
         if((ex-pcx())*P.face>0 && fabsf(ex-pcx())<40.0f+EW*0.5f && fabsf(ey-pcy())<TILE*0.8f){ hit=i; break; } }
-    if(hit>=0){ Enemy*e=&g_en[hit]; e->hp-=45; e->hitFlash=0.12f; g_shake=fmaxf(g_shake,6.0f);
+    if(hit>=0){ Enemy*e=&g_en[hit]; e->hp-=45; e->hitFlash=0.12f; g_shake=fmaxf(g_shake,6.0f); FloatDmg(e->x+EW*0.5f,e->y,45);
         Emit(e->x+EW*0.5f,e->y+EH*0.5f,8,240,0.35f,2.0f,(Color){200,40,40,255},0,1);
         if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"melee\"",hit); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
         else DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":45,\"cause\":\"melee\"",hit); }
@@ -561,7 +563,7 @@ static void ExplodeBomb(float bx,float by){
             if((cx-bx)*(cx-bx)+(cy-by)*(cy-by) < BOMB_RADIUS*BOMB_RADIUS){ g_crack[r][c]=0; g_tiles[r][c]='.'; destroyed++; } }
     }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive) continue; float ex=e->x+EW*0.5f,ey=e->y+EH*0.5f;
-        if((ex-bx)*(ex-bx)+(ey-by)*(ey-by)<BOMB_RADIUS*BOMB_RADIUS){ e->hp-=BOMB_DMG; e->hitFlash=0.12f; hits++;
+        if((ex-bx)*(ex-bx)+(ey-by)*(ey-by)<BOMB_RADIUS*BOMB_RADIUS){ e->hp-=BOMB_DMG; e->hitFlash=0.12f; hits++; FloatDmg(e->x+EW*0.5f,e->y,BOMB_DMG);
             if(e->hp<=0){ e->alive=0; e->st="DEAD"; DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"bomb\"",i); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } } } }
     float pdx=pcx()-bx, pdy=pcy()-by; if(pdx*pdx+pdy*pdy<BOMB_RADIUS*BOMB_RADIUS) HurtPlayer(30,"bomb");
     g_boomT=0.35f; g_boomX=bx; g_boomY=by; SndPlay(SND_BOMB);
@@ -1101,7 +1103,7 @@ static void DrawParticles(void){
         DrawRectangle((int)(p->x-s),(int)(p->y-s),(int)(s*2+1),(int)(s*2+1),(Color){p->r,p->g,p->b,(unsigned char)(a*255)}); }
     EndBlendMode();
 }
-static void DrawFloats(void){ for(int i=0;i<MAXFLOATTXT;i++){ FloatTxt*f=&g_float[i]; if(f->life<=0) continue; unsigned char a=(unsigned char)((f->life>1?1:f->life)*255); int w=MeasureText(f->s,12); DrawText(f->s,(int)(f->x-w/2),(int)f->y,12,(Color){240,235,180,a}); } }
+static void DrawFloats(void){ for(int i=0;i<MAXFLOATTXT;i++){ FloatTxt*f=&g_float[i]; if(f->life<=0) continue; unsigned char a=(unsigned char)((f->life>1?1:f->life)*255); int sz=f->kind?15:12; Color c=f->kind?(Color){255,160,100,a}:(Color){240,235,180,a}; int w=MeasureText(f->s,sz); DrawText(f->s,(int)(f->x-w/2),(int)f->y,sz,c); } }
 static void Light(float wx,float wy,float rad,Color c){ DrawTexturePro(g_tLight,(Rectangle){0,0,128,128},(Rectangle){wx-g_cam.x-rad,wy-g_cam.y-rad,rad*2,rad*2},(Vector2){0,0},0,c); }
 static void DrawLighting(void){
     Color t=AreaTint();
