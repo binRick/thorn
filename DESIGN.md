@@ -458,9 +458,18 @@ incremental and instant when nothing changed.
   sprite pipeline** loads animated PNG strips from `assets/sprites/` (with a
   bundled, original **CC0** set generated via `--gen-assets`; falls back to the
   in-code art) so the game can be reskinned with any CC0 pack by replacing files.
+  Added since: a title-screen **difficulty** selector (Easy/Normal/Hard) and
+  **options persistence** (`options.txt`); a selectable **pause menu**; **camera
+  lookahead** with eased follow; **per-area ambient particles**; "NOW ENTERING"
+  **area title cards**; **floating damage numbers**; landing dust + checkpoint
+  feedback; and damaged-only enemy health bars.
+  A **WebAssembly build** (`make web`) now ships: the windowed loop is factored
+  into `Frame()` so the browser drives it via `emscripten_set_main_loop` while
+  desktop uses a `while` loop (identical behaviour); raylib is rebuilt for
+  `PLATFORM_WEB` into a separate archive and the game compiles to
+  `build/web/thorn.{html,js,wasm,data}` with levels/assets preloaded.
   Still to do: higher-fidelity sprite atlases + more animation frames, optional
-  shader bloom/CRT, persistent shard collection, music, menus, and Linux/Web/iOS
-  build parity.
+  shader bloom/CRT, persistent shard collection, music, and Linux/iOS parity.
 
 ## 9. Risks & open questions
 - **Climb feel** is the hardest thing to make non-fiddly without a jump button;
