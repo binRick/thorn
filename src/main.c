@@ -458,7 +458,7 @@ static const char* PStateName(void){
 }
 
 // ---- Combat -----------------------------------------------------------------
-enum { SND_FIRE, SND_DRY, SND_RELOAD, SND_ENEMYFIRE, SND_HIT, SND_DEATH, SND_PICKUP, SND_LEVER, SND_BOMB, SND_UPGRADE, SND_JUMP, SND_MELEE, SND_N };
+enum { SND_FIRE, SND_DRY, SND_RELOAD, SND_ENEMYFIRE, SND_HIT, SND_DEATH, SND_PICKUP, SND_LEVER, SND_BOMB, SND_UPGRADE, SND_JUMP, SND_MELEE, SND_STEP, SND_LAND, SND_N };
 static int   g_audio=0; static Sound g_snd[SND_N];   // filled by InitAudio() (Chunk E); no-op until then
 static void SndPlay(int id){ if(g_audio && id>=0 && id<SND_N) PlaySound(g_snd[id]); }
 
@@ -554,6 +554,7 @@ static void PlayerMoveY(void){
     int c0=(int)floorf(P.x/TILE), c1=(int)floorf((P.x+PW-1)/TILE);
     if(P.vy>0){ int r=(int)floorf((P.y+PH)/TILE); for(int c=c0;c<=c1;c++) if(SolidAt(c,r)){ P.y=r*TILE-PH-0.01f; P.vy=0; P.onGround=1; break; } }
     else if(P.vy<0){ int r=(int)floorf(P.y/TILE); for(int c=c0;c<=c1;c++) if(SolidAt(c,r)){ P.y=(r+1)*TILE+0.01f; P.vy=0; break; } }
+    if(P.onGround && vy0>300.0f) SndPlay(SND_LAND);
     if(P.onGround && vy0>FALL_HURT){ int dmg=(int)((vy0-FALL_HURT)/45.0f); if(dmg>0){ DebugLog("fall","\"vy\":%.0f,\"dmg\":%d,\"fatal\":false",vy0,dmg); HurtPlayer(dmg,"fall"); } }
 }
 
@@ -655,6 +656,7 @@ static void UpdatePlayer(Input in){
 
     P.vy=fminf(P.vy+GRAV*DT,MAXFALL);
     PlayerMoveX(); PlayerMoveY(); ResolveLifts();
+    { static float stepT=0; if(P.onGround&&!P.inCover&&fabsf(P.vx)>WALK_SPD*0.6f){ stepT-=DT; if(stepT<=0){ SndPlay(SND_STEP); stepT=0.30f; } } else stepT=0; }   // footsteps
 
     int feetRow=(int)floorf((P.y+PH+1)/TILE)-1, ccol=(int)floorf(pcx()/TILE);
     if(P.onGround && feetRow>=0 && ccol>=0 && g_spike[feetRow][ccol]) HurtPlayer(SPIKE_DMG,"spike");
@@ -1182,6 +1184,8 @@ static void InitAudio(void){
     g_snd[SND_UPGRADE]   = GenTone(0.30f,500,900,0,0.6f);
     g_snd[SND_JUMP]      = GenTone(0.14f,300,520,0,0.4f);
     g_snd[SND_MELEE]     = GenTone(0.10f,600,180,2,0.5f);
+    g_snd[SND_STEP]      = GenTone(0.05f,110, 70,2,0.22f);
+    g_snd[SND_LAND]      = GenTone(0.10f,150, 55,2,0.40f);
     g_audio=1;
 }
 
