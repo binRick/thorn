@@ -47,6 +47,7 @@ source into `vendor/` (a few minutes, once). After that, launches are instant.
 | **Jump** | `Space` |
 | Fire forward | `J` / `Ctrl` |
 | **Fire backward (over the shoulder)** | `K` |
+| Knife (melee) | `V` |
 | Place bomb (blows cracked walls) | `E` |
 | Pause · Debug overlay | `P` · `` ` `` or `Tab` |
 | Respawn · God · Hitboxes (dev) | `R` · `G` · `H` |

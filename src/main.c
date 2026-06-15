@@ -124,6 +124,7 @@ static struct {
     int   gunPow, gunSpd; float reloadT;
     int   onLift;          // index of the lift the player is riding, or -1
     float hurtT;           // flinch-animation timer
+    float meleeCD,meleeT;  // knife cooldown + swing timer
     int   dead; float deadT;
 } P;
 
@@ -222,7 +223,7 @@ static void Ev(const char*fmt,...){ va_list ap; va_start(ap,fmt); vsnprintf(g_ev
 
 // ---- Input ------------------------------------------------------------------
 typedef struct { int left,right,walk;            // held
-                 int up,down,fireF,fireB,use,cycle,jump; } Input; // edge
+                 int up,down,fireF,fireB,use,cycle,jump,melee; } Input; // edge
 
 static Input KeyInput(void){
     Input in={0};
@@ -234,6 +235,7 @@ static Input KeyInput(void){
     in.fireF = IsKeyPressed(KEY_J)||IsKeyPressed(KEY_LEFT_CONTROL);
     in.fireB = IsKeyPressed(KEY_K);
     in.jump  = IsKeyPressed(KEY_SPACE);
+    in.melee = IsKeyPressed(KEY_V);
     in.use   = IsKeyPressed(KEY_E)||IsKeyPressed(KEY_ENTER);
     in.cycle = IsKeyPressed(KEY_Q);
     return in;
@@ -253,6 +255,7 @@ static Input DemoFrameInput(long f){
     if(f%96==1)  in.fireF=1;
     if(f%22==3)  in.up=1;     // ~5.5 Hz: throws levers / uses doors / climbs in passing
     if(f%440==220) in.fireB=1;
+    if(f%80==10)   in.melee=1; // occasional knife swing
     if(f%600==90)  in.use=1;  // occasionally drop a bomb (exercises the explosive path)
     if(f%140==30)  in.jump=1; // occasional jump (exercises the airborne path)
     return in;
@@ -455,7 +458,7 @@ static const char* PStateName(void){
 }
 
 // ---- Combat -----------------------------------------------------------------
-enum { SND_FIRE, SND_DRY, SND_RELOAD, SND_ENEMYFIRE, SND_HIT, SND_DEATH, SND_PICKUP, SND_LEVER, SND_BOMB, SND_UPGRADE, SND_JUMP, SND_N };
+enum { SND_FIRE, SND_DRY, SND_RELOAD, SND_ENEMYFIRE, SND_HIT, SND_DEATH, SND_PICKUP, SND_LEVER, SND_BOMB, SND_UPGRADE, SND_JUMP, SND_MELEE, SND_N };
 static int   g_audio=0; static Sound g_snd[SND_N];   // filled by InitAudio() (Chunk E); no-op until then
 static void SndPlay(int id){ if(g_audio && id>=0 && id<SND_N) PlaySound(g_snd[id]); }
 
@@ -495,6 +498,20 @@ static void HurtPlayer(int dmg,const char*cause){
     DebugLog("hit","\"who\":\"player\",\"dmg\":%d,\"hp\":%d,\"cause\":\"%s\"",dmg,P.hp,cause);
     Ev("player hit -%d (%s)",dmg,cause);
     if(P.hp<=0){ P.hp=0; P.dead=1; P.deadT=0; DebugLog("death","\"who\":\"player\",\"x\":%.1f,\"y\":%.1f,\"cause\":\"%s\"",P.x,P.y,cause); Ev("player DIED (%s)",cause); }
+}
+
+// Knife: short-range melee in the facing direction (no ammo). V.
+static void Melee(void){
+    if(P.meleeCD>0||P.reloadT>0||P.dead) return;
+    P.meleeCD=0.4f; P.meleeT=0.12f; SndPlay(SND_MELEE);
+    int hit=-1;
+    for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive||e->inCover) continue; float ex=e->x+EW*0.5f, ey=e->y+EH*0.5f;
+        if((ex-pcx())*P.face>0 && fabsf(ex-pcx())<40.0f+EW*0.5f && fabsf(ey-pcy())<TILE*0.8f){ hit=i; break; } }
+    if(hit>=0){ Enemy*e=&g_en[hit]; e->hp-=45; e->hitFlash=0.12f; g_shake=fmaxf(g_shake,6.0f);
+        Emit(e->x+EW*0.5f,e->y+EH*0.5f,8,240,0.35f,2.0f,(Color){200,40,40,255},0,1);
+        if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"melee\"",hit); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
+        else DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":45,\"cause\":\"melee\"",hit); }
+    DebugLog("melee","\"x\":%.1f,\"face\":%d,\"hit\":%s",pcx(),P.face,hit>=0?"true":"false"); Ev("knife%s",hit>=0?" HIT":"");
 }
 
 // ---- Bombs & cracked walls --------------------------------------------------
@@ -566,6 +583,7 @@ static void ResolveLifts(void){
 static void UpdatePlayer(Input in){
     if(P.dead){ P.deadT+=DT; if(P.deadT>1.4f) RespawnAtCheckpoint(); return; }
     P.iframes=fmaxf(0,P.iframes-DT); P.fireCD=fmaxf(0,P.fireCD-DT); P.muzzle=fmaxf(0,P.muzzle-DT); P.hurtT=fmaxf(0,P.hurtT-DT);
+    P.meleeCD=fmaxf(0,P.meleeCD-DT); P.meleeT=fmaxf(0,P.meleeT-DT);
     if(P.reloadT>0){ P.reloadT-=DT; if(P.reloadT<=0){ int load=MAG_MAX-P.mag; if(load>P.reserve)load=P.reserve; P.mag+=load; P.reserve-=load; DebugLog("reload","\"done\":true,\"mag\":%d,\"reserve\":%d",P.mag,P.reserve); Ev("reloaded (%d)",P.mag); } }
 
     if(P.climbT>0){ P.climbT-=DT; return; }
@@ -632,6 +650,7 @@ static void UpdatePlayer(Input in){
     if(in.fireF) Fire(P.face);
     if(in.fireB) Fire(-P.face);
     if(in.use)   PlaceBomb();   // E: drop a bomb (blows cracked walls / clusters)
+    if(in.melee) Melee();       // V: knife
     if(in.jump && (P.onGround||P.onLift>=0)){ P.vy=-JUMP_V; P.onGround=0; P.onLift=-1; SndPlay(SND_JUMP); DebugLog("jump","\"x\":%.1f,\"y\":%.1f",P.x,P.y); Ev("jump"); }
 
     P.vy=fminf(P.vy+GRAV*DT,MAXFALL);
@@ -1073,6 +1092,7 @@ static void DrawWorld(void){
             else { Texture2D ht=(moving && ((int)(GetTime()*8)&1))?g_tHeroWalk:g_tHeroIdle; DrawActorTex(ht,P.x,P.y,PW,PH,P.face,a,0); }
             if(P.muzzle>0) DrawCircle((int)(P.muzzleDir>0?P.x+PW+6:P.x-6),(int)(P.y+PH*0.42f+2),8,(Color){255,230,120,235}); }
         else { Color pc = P.iframes>0?(Color){255,255,255,255}:(Color){90,150,235,255}; DrawFigure(P.x,P.y,PW,PH,P.face,pc,P.muzzle>0,P.muzzleDir,P.inCover); }
+        if(P.meleeT>0){ float mx=P.face>0?P.x+PW:P.x; DrawLineEx((Vector2){mx,P.y+PH*0.30f},(Vector2){mx+P.face*24,P.y+PH*0.55f},3,(Color){235,240,255,225}); DrawLineEx((Vector2){mx,P.y+PH*0.58f},(Vector2){mx+P.face*22,P.y+PH*0.36f},2,(Color){200,220,255,150}); }   // knife slash
     } else DrawRectangle((int)P.x,(int)(P.y+PH-8),(int)PW,8,(Color){120,40,40,220});
     if(g_hitboxes){ DrawRectangleLinesEx((Rectangle){P.x,P.y,PW,PH},1,GREEN); for(int i=0;i<g_enN;i++) if(g_en[i].alive) DrawRectangleLinesEx((Rectangle){g_en[i].x,g_en[i].y,EW,EH},1,RED); }
     if(g_fx) DrawParticles();   // world-space, on top of actors
@@ -1091,7 +1111,7 @@ static void DrawHUD(void){
     DrawText(TextFormat("BOMB %d  SHARD %d  KEY %d  GUN P%d S%d",P.bombs,P.shards,P.keys,P.gunPow,P.gunSpd),470,12,18,(Color){180,200,210,255});
     DrawText(TextFormat("%s / %s",g_areaName,g_roomName),SCREEN_W-380,12,18,(Color){150,160,180,255});
     DrawText(TextFormat("STATE %s",PStateName()),14,SCREEN_H-26,18,(Color){150,170,190,255});
-    DrawText("A/D move  SPACE jump  W climb/use  J fire  K back  E bomb  F fx  ` debug",330,SCREEN_H-26,16,(Color){90,100,115,255});
+    DrawText("A/D move  SPACE jump  J fire  K back  V knife  E bomb  W use  F fx  ` debug",300,SCREEN_H-26,16,(Color){90,100,115,255});
     { int fps=GetFPS(); const char*ft=TextFormat("%d FPS",fps); int fw=MeasureText(ft,18);
       Color fc = fps>=60?(Color){120,210,120,255} : fps>=30?(Color){220,210,120,255} : (Color){220,110,110,255};
       DrawText(ft,SCREEN_W-fw-12,SCREEN_H-26,18,fc); }
@@ -1161,6 +1181,7 @@ static void InitAudio(void){
     g_snd[SND_BOMB]      = GenTone(0.50f,120, 40,2,1.0f);
     g_snd[SND_UPGRADE]   = GenTone(0.30f,500,900,0,0.6f);
     g_snd[SND_JUMP]      = GenTone(0.14f,300,520,0,0.4f);
+    g_snd[SND_MELEE]     = GenTone(0.10f,600,180,2,0.5f);
     g_audio=1;
 }
 
@@ -1288,7 +1309,7 @@ int main(int argc,char**argv){
             acc+=ft; int steps=0;
             while(acc>=DT && steps<5){
                 SimStep(in);
-                in.up=in.down=in.fireF=in.fireB=in.use=in.cycle=in.jump=0;   // consume edges after first sub-step
+                in.up=in.down=in.fireF=in.fireB=in.use=in.cycle=in.jump=in.melee=0;   // consume edges after first sub-step
                 acc-=DT; steps++; g_frame++;
                 if((g_rate>0 && g_frame%g_rate==0) || g_rate<=0) EmitState();
                 if(g_maxFrames && g_frame>=g_maxFrames) running=0;
