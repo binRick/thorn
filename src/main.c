@@ -208,7 +208,7 @@ static int  g_pendActive=0, g_pendSpawn=-1; static char g_pendTarget[48]="";    
 static int  g_areaClear=0, g_victory=0;
 static char g_curPassword[16]="";          // password of the current room (if any)
 static char g_msg[96]=""; static float g_msgT=0;   // transient on-screen banner (hints, passwords)
-static Vector2 g_cam={0,0};
+static Vector2 g_cam={0,0}; static int g_camInit=0;   // g_camInit=0 -> snap (set on room load)
 
 static int  KeyCount(const char*c){ for(int i=0;i<g_keyN;i++) if(!strcmp(g_keys[i].color,c)) return g_keys[i].count; return 0; }
 static void KeyAdd(const char*c){ for(int i=0;i<g_keyN;i++) if(!strcmp(g_keys[i].color,c)){ g_keys[i].count++; return; } if(g_keyN<MAXKEY){ snprintf(g_keys[g_keyN].color,12,"%s",c); g_keys[g_keyN].count=1; g_keyN++; } }
@@ -426,6 +426,7 @@ static void LoadRoom(const char*path,int spawnDoor,int setCheckpoint){
     if(setCheckpoint){ snprintf(g_cpPath,sizeof g_cpPath,"%s",g_roomPath); g_cpX=P.x; g_cpY=P.y; g_cpFace=P.face; }
     DebugLog("level","\"area\":\"%s\",\"room\":\"%s\",\"w\":%d,\"h\":%d,\"enemies\":%d,\"doors\":%d,\"pickups\":%d,\"levers\":%d",
              JStr(g_areaName),JStr(g_roomName),g_W,g_H,g_enN,g_doorN,g_pkN,g_leverN);
+    g_camInit=0;   // snap the camera to the hero on the first frame of the new room
     {   // first time in this area this game -> announce it with a title card
         int seen=0; for(int i=0;i<g_areaSeenN;i++) if(!strcmp(g_areaSeen[i],g_areaName)){ seen=1; break; }
         if(!seen){
@@ -783,10 +784,13 @@ static void UpdateEnemies(void){
 }
 static void UpdateShots(void){ for(int i=0;i<MAXSHOT;i++) if(g_shot[i].age>=0) g_shot[i].age+=DT; }
 static void UpdateCam(void){
-    float tx=pcx(), ty=pcy();
+    float look = P.face * 96.0f;   // lead the camera in the direction the hero faces
+    float tx=pcx()+look, ty=pcy();
     tx = (g_W*TILE<=SCREEN_W)? g_W*TILE*0.5f : clampf(tx,SCREEN_W*0.5f,g_W*TILE-SCREEN_W*0.5f);
     ty = (g_H*TILE<=SCREEN_H)? g_H*TILE*0.5f : clampf(ty,SCREEN_H*0.5f,g_H*TILE-SCREEN_H*0.5f);
-    g_cam.x=tx-SCREEN_W*0.5f; g_cam.y=ty-SCREEN_H*0.5f;
+    float dx=tx-SCREEN_W*0.5f, dy=ty-SCREEN_H*0.5f;
+    if(!g_camInit){ g_cam.x=dx; g_cam.y=dy; g_camInit=1; }   // first frame in a room: snap
+    else { g_cam.x += (dx-g_cam.x)*0.09f; g_cam.y += (dy-g_cam.y)*0.16f; }   // ease (x leads, y tracks tighter)
 }
 
 // One simulation step. Applies a deferred door transition (a door can't reload
