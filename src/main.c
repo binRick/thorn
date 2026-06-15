@@ -210,6 +210,7 @@ static void Msg(float secs,const char*fmt,...){ va_list ap; va_start(ap,fmt); vs
 static int g_noEnemies=0, g_god=0, g_demo=0, g_paused=0, g_overlay=0, g_hitboxes=0, g_selftest=0;
 static int g_rate=24, g_maxFrames=0, g_shotFrame=0, g_startSpawn=-1;
 static long g_frame=0; static int g_won=0;
+enum { SCENE_TITLE, SCENE_PLAY }; static int g_scene=SCENE_TITLE, g_menuSel=0, g_skiptitle=0;
 static char g_roomStart[160]="levels/sunken_mines/entrance.lvl";
 static const struct { const char*code; const char*path; } g_pwTable[] = {   // --password
     {"MINE","levels/sunken_mines/entrance.lvl"}, {"MIRE","levels/the_mire/entrance.lvl"},
@@ -422,6 +423,18 @@ static void RespawnAtCheckpoint(void){
     P.hp=P_HP_MAX; P.dead=0; P.deadT=0; P.iframes=0; P.vx=P.vy=0; P.mag=MAG_MAX; P.reloadT=0;
     if(g_cpPath[0]){ LoadRoom(g_cpPath,-2,0); P.x=g_cpX; P.y=g_cpY; P.face=g_cpFace; P.onGround=1; P.inCover=0; P.climbT=0; }
     DebugLog("respawn","\"room\":\"%s\",\"x\":%.1f,\"y\":%.1f",JStr(g_roomName),P.x,P.y); Ev("respawn @ %s",g_roomName);
+}
+
+static void NewGame(void){
+    P.hp=P_HP_MAX; P.mag=MAG_MAX; P.reserve=RESERVE_START; P.gunPow=0; P.gunSpd=0; P.reloadT=0;
+    P.bombs=1; P.shards=0; P.keys=0; g_keyN=0; g_collN=0; g_won=0; g_areaClear=0; g_victory=0;
+    LoadRoom(g_roomStart,g_startSpawn,1);
+}
+static void ContinueGame(void){   // resume from the saved area entrance (password system)
+    char path[160]=""; FILE*sf=fopen("thorn-save.txt","r");
+    if(sf){ char code[32]=""; if(fscanf(sf,"%31s %159s",code,path)!=2) path[0]=0; fclose(sf); }
+    if(path[0]) snprintf(g_roomStart,sizeof g_roomStart,"%s",path);
+    NewGame();
 }
 
 static void SpawnShot(float x1,float y1,float x2,float y2,int owner){
@@ -1085,7 +1098,8 @@ static void DrawHUD(void){
     if(g_msgT>0){ int w=MeasureText(g_msg,22); DrawRectangle(0,50,SCREEN_W,30,(Color){0,0,0,150}); DrawText(g_msg,SCREEN_W/2-w/2,55,22,(Color){235,225,160,255}); }
     if(g_won){ const char*m=g_victory?"THE USURPER FALLS":g_areaClear?"AREA CLEAR":"LEVEL CLEAR"; Color col=g_victory?(Color){235,210,90,255}:(Color){120,230,140,255}; int w=MeasureText(m,52); DrawRectangle(0,SCREEN_H/2-50,SCREEN_W,100,(Color){0,0,0,170}); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,col); }
     if(P.dead){ const char*m="YOU DIED"; int w=MeasureText(m,52); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,(Color){220,80,80,255}); }
-    if(g_paused){ const char*m="PAUSED"; int w=MeasureText(m,40); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-20,40,RAYWHITE); }
+    if(g_paused){ const char*m="PAUSED"; int w=MeasureText(m,40); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-20,40,RAYWHITE);
+        const char*h="P resume    BACKSPACE title"; int hw=MeasureText(h,18); DrawText(h,SCREEN_W/2-hw/2,SCREEN_H/2+28,18,(Color){170,180,195,255}); }
 }
 
 static void DrawOverlay(void){
@@ -1100,6 +1114,25 @@ static void DrawOverlay(void){
     DrawText(TextFormat("keys %d bombs %d shards %d",P.keys,P.bombs,P.shards),x+10,y+110,16,(Color){200,200,120,255});
     DrawText("recent events:",x+10,y+134,16,(Color){150,200,220,255});
     for(int i=0;i<8;i++){ int idx=(g_evHead+i)%8; if(g_evlog[idx][0]) DrawText(g_evlog[idx],x+10,y+154+i*13,12,(Color){170,180,190,255}); }
+}
+
+static void DrawTitle(void){
+    DrawRectangleGradientV(0,0,SCREEN_W,SCREEN_H,(Color){18,22,36,255},(Color){6,7,11,255});
+    if(g_fx){ BeginBlendMode(BLEND_ADDITIVE); DrawTexturePro(g_tLight,(Rectangle){0,0,128,128},(Rectangle){SCREEN_W/2-360,40,720,360},(Vector2){0,0},0,(Color){70,90,150,90}); EndBlendMode(); }
+    const char*ti="THORN"; int ts=128, tw=MeasureText(ti,ts);
+    DrawText(ti,SCREEN_W/2-tw/2+4,154,ts,(Color){8,10,16,255});
+    DrawText(ti,SCREEN_W/2-tw/2,150,ts,(Color){120,162,236,255});
+    const char*sub="a cinematic platformer"; int sw=MeasureText(sub,24);
+    DrawText(sub,SCREEN_W/2-sw/2,292,24,(Color){150,160,188,255});
+    const char*items[3]={"New Game","Continue","Quit"};
+    for(int i=0;i<3;i++){ int sel=(i==g_menuSel),fs=32,w=MeasureText(items[i],fs); int yy=388+i*52;
+        Color c=sel?(Color){240,226,150,255}:(Color){140,150,172,255};
+        if(sel) DrawText(">",SCREEN_W/2-w/2-34,yy,fs,c);
+        DrawText(items[i],SCREEN_W/2-w/2,yy,fs,c); }
+    const char*h="Up/Down + Enter      Esc quits"; int hw=MeasureText(h,18);
+    DrawText(h,SCREEN_W/2-hw/2,SCREEN_H-54,18,(Color){95,105,122,255});
+    DrawText("original tribute to Blackthorne (1994)  -  CC0 art",14,SCREEN_H-26,14,(Color){66,74,88,255});
+    DrawText(TextFormat("%d FPS",GetFPS()),SCREEN_W-78,SCREEN_H-26,18,(Color){90,140,90,255});
 }
 
 // ---- Audio (procedural: synthesized in code, no asset files) ----------------
@@ -1176,6 +1209,7 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--shot")&&i+1<argc) g_shotFrame=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--dumpsprites")) dump=1;
         else if(!strcmp(argv[i],"--gen-assets")) genassets=1;
+        else if(!strcmp(argv[i],"--skiptitle")) g_skiptitle=1;
         else if(!strcmp(argv[i],"--nofx")) g_fx=0;
         else if(!strcmp(argv[i],"--continue")) docontinue=1;
         else if(!strcmp(argv[i],"--password")&&i+1<argc) snprintf(pwarg,sizeof pwarg,"%s",argv[++i]);
@@ -1208,9 +1242,8 @@ int main(int argc,char**argv){
     DebugLog("window","\"w\":%d,\"h\":%d,\"monitor\":%d",SCREEN_W,SCREEN_H,g_headless?0:GetCurrentMonitor());
 
     // New game: stats, then the first room (LoadRoom logs its own "level" event).
-    P.hp=P_HP_MAX; P.mag=MAG_MAX; P.reserve=RESERVE_START; P.gunPow=0; P.gunSpd=0; P.reloadT=0;
-    P.bombs=1; P.shards=0; P.keys=0; g_keyN=0;
-    LoadRoom(g_roomStart,g_startSpawn,1);
+    if(g_headless || g_demo || g_skiptitle){ NewGame(); g_scene=SCENE_PLAY; }   // skip the title menu
+    else g_scene=SCENE_TITLE;                                                    // windowed: show the menu
 
     if(g_headless){
         int running=1;
@@ -1228,7 +1261,19 @@ int main(int argc,char**argv){
 
     float acc=0; int shotDone=0; int running=1;
     while(running && !WindowShouldClose()){
+        if(g_scene==SCENE_TITLE){
+            if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W))   g_menuSel=(g_menuSel+2)%3;
+            if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) g_menuSel=(g_menuSel+1)%3;
+            if(IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE)){
+                if(g_menuSel==0){ NewGame(); g_scene=SCENE_PLAY; }
+                else if(g_menuSel==1){ ContinueGame(); g_scene=SCENE_PLAY; }
+                else running=0;
+            }
+            BeginDrawing(); ClearBackground((Color){10,11,16,255}); DrawTitle(); EndDrawing();
+            continue;
+        }
         if(IsKeyPressed(KEY_GRAVE)||IsKeyPressed(KEY_TAB)) g_overlay=!g_overlay;
+        if(g_paused && IsKeyPressed(KEY_BACKSPACE)){ g_scene=SCENE_TITLE; g_paused=0; g_menuSel=0; continue; }   // pause -> title
         if(IsKeyPressed(KEY_P)){ g_paused=!g_paused; DebugLog("pause","\"paused\":%s",g_paused?"true":"false"); }
         if(IsKeyPressed(KEY_G)){ g_god=!g_god; DebugLog("mode","\"god\":%s",g_god?"true":"false"); }
         if(IsKeyPressed(KEY_H)) g_hitboxes=!g_hitboxes;
