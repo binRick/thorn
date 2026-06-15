@@ -148,9 +148,9 @@ static Part g_part[MAXPART]; static int g_partHead=0;
 static int   g_fx=1; static float g_shake=0;
 static Texture2D g_tLight, g_tVign;   // soft radial light + vignette (built in InitSprites)
 typedef struct { float x,y,life; char s[16]; } FloatTxt;   // rising pickup labels
-#define MAXFLOAT 16
-static FloatTxt g_float[MAXFLOAT]; static int g_floatHead=0;
-static void FloatSpawn(float x,float y,const char*s){ if(!g_fx||g_headless) return; FloatTxt*f=&g_float[g_floatHead]; g_floatHead=(g_floatHead+1)%MAXFLOAT; f->x=x; f->y=y; f->life=1.1f; snprintf(f->s,sizeof f->s,"%s",s); }
+#define MAXFLOATTXT 16
+static FloatTxt g_float[MAXFLOATTXT]; static int g_floatHead=0;
+static void FloatSpawn(float x,float y,const char*s){ if(!g_fx||g_headless) return; FloatTxt*f=&g_float[g_floatHead]; g_floatHead=(g_floatHead+1)%MAXFLOATTXT; f->x=x; f->y=y; f->life=1.1f; snprintf(f->s,sizeof f->s,"%s",s); }
 static void Emit(float x,float y,int n,float spd,float life,float size,Color c,int add,int grav){
     if(!g_fx||g_headless) return;
     for(int k=0;k<n;k++){ Part*p=&g_part[g_partHead]; g_partHead=(g_partHead+1)%MAXPART;
@@ -164,7 +164,7 @@ static void UpdateParticles(void){
     if(g_shake>0){ g_shake-=DT*38.0f; if(g_shake<0) g_shake=0; }
     for(int i=0;i<MAXPART;i++){ Part*p=&g_part[i]; if(p->life<=0) continue;
         p->life-=DT; if(p->grav) p->vy+=900.0f*DT; p->x+=p->vx*DT; p->y+=p->vy*DT; p->vx*=0.985f; }
-    for(int i=0;i<MAXFLOAT;i++) if(g_float[i].life>0){ g_float[i].life-=DT*1.25f; g_float[i].y-=22.0f*DT; }
+    for(int i=0;i<MAXFLOATTXT;i++) if(g_float[i].life>0){ g_float[i].life-=DT*1.25f; g_float[i].y-=22.0f*DT; }
 }
 
 // ---- World grid -------------------------------------------------------------
@@ -1047,7 +1047,7 @@ static void DrawParticles(void){
         DrawRectangle((int)(p->x-s),(int)(p->y-s),(int)(s*2+1),(int)(s*2+1),(Color){p->r,p->g,p->b,(unsigned char)(a*255)}); }
     EndBlendMode();
 }
-static void DrawFloats(void){ for(int i=0;i<MAXFLOAT;i++){ FloatTxt*f=&g_float[i]; if(f->life<=0) continue; unsigned char a=(unsigned char)((f->life>1?1:f->life)*255); int w=MeasureText(f->s,12); DrawText(f->s,(int)(f->x-w/2),(int)f->y,12,(Color){240,235,180,a}); } }
+static void DrawFloats(void){ for(int i=0;i<MAXFLOATTXT;i++){ FloatTxt*f=&g_float[i]; if(f->life<=0) continue; unsigned char a=(unsigned char)((f->life>1?1:f->life)*255); int w=MeasureText(f->s,12); DrawText(f->s,(int)(f->x-w/2),(int)f->y,12,(Color){240,235,180,a}); } }
 static void Light(float wx,float wy,float rad,Color c){ DrawTexturePro(g_tLight,(Rectangle){0,0,128,128},(Rectangle){wx-g_cam.x-rad,wy-g_cam.y-rad,rad*2,rad*2},(Vector2){0,0},0,c); }
 static void DrawLighting(void){
     Color t=AreaTint();
