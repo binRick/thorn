@@ -449,6 +449,21 @@ static void ContinueGame(void){   // resume from the saved area entrance (passwo
     NewGame();
 }
 
+// Persist player-chosen options (difficulty, FX) so they stick across launches.
+static void SaveOptions(void){
+    FILE*f=fopen("options.txt","w");
+    if(f){ fprintf(f,"diff %d\nfx %d\n",g_diff,g_fx); fclose(f); }
+}
+static void LoadOptions(void){
+    FILE*f=fopen("options.txt","r"); if(!f) return;
+    char k[16]; int v;
+    while(fscanf(f,"%15s %d",k,&v)==2){
+        if(!strcmp(k,"diff")&&v>=0&&v<=2) g_diff=v;
+        else if(!strcmp(k,"fx")) g_fx=v?1:0;
+    }
+    fclose(f);
+}
+
 static void SpawnShot(float x1,float y1,float x2,float y2,int owner){
     g_shot[g_shotHead]=(Shot){x1,y1,x2,y2,0,owner}; g_shotHead=(g_shotHead+1)%MAXSHOT;
 }
@@ -1257,6 +1272,7 @@ static int RunSelfTest(void){
 // ---- main -------------------------------------------------------------------
 int main(int argc,char**argv){
     int dump=0,genassets=0,docontinue=0; char pwarg[16]="";
+    LoadOptions();   // file defaults; CLI flags below override
     for(int i=1;i<argc;i++){
         if(!strcmp(argv[i],"--debug")) g_debug=1;
         else if(!strcmp(argv[i],"--no-enemies")) g_noEnemies=1;
@@ -1282,6 +1298,7 @@ int main(int argc,char**argv){
     if(pwarg[0]) for(unsigned k=0;k<sizeof(g_pwTable)/sizeof(g_pwTable[0]);k++) if(!strcmp(pwarg,g_pwTable[k].code)){ snprintf(g_roomStart,sizeof g_roomStart,"%s",g_pwTable[k].path); break; }
     if(docontinue){ FILE*sf=fopen("thorn-save.txt","r"); if(sf){ char code[32]="",path[160]=""; if(fscanf(sf,"%31s %159s",code,path)==2 && path[0]) snprintf(g_roomStart,sizeof g_roomStart,"%s",path); fclose(sf); } }
     if(g_debug){ g_dbg=fopen("thorn-debug.log","w"); if(!g_dbg) g_dbg=stderr; }
+    DebugLog("options","\"diff\":%d,\"fx\":%s",g_diff,g_fx?"true":"false");
     for(int i=0;i<MAXSHOT;i++) g_shot[i].age=-1;
 
     if(g_selftest){ int e=RunSelfTest(); if(g_dbg&&g_dbg!=stderr) fclose(g_dbg); return e?1:0; }
@@ -1327,8 +1344,8 @@ int main(int argc,char**argv){
         if(g_scene==SCENE_TITLE){
             if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W))   g_menuSel=(g_menuSel+2)%3;
             if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) g_menuSel=(g_menuSel+1)%3;
-            if(IsKeyPressed(KEY_LEFT)||IsKeyPressed(KEY_A))  g_diff=(g_diff+2)%3;
-            if(IsKeyPressed(KEY_RIGHT)||IsKeyPressed(KEY_D)) g_diff=(g_diff+1)%3;
+            if(IsKeyPressed(KEY_LEFT)||IsKeyPressed(KEY_A)) { g_diff=(g_diff+2)%3; SaveOptions(); }
+            if(IsKeyPressed(KEY_RIGHT)||IsKeyPressed(KEY_D)){ g_diff=(g_diff+1)%3; SaveOptions(); }
             if(IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE)){
                 if(g_menuSel==0){ NewGame(); g_scene=SCENE_PLAY; }
                 else if(g_menuSel==1){ ContinueGame(); g_scene=SCENE_PLAY; }
@@ -1342,7 +1359,7 @@ int main(int argc,char**argv){
         if(IsKeyPressed(KEY_P)){ g_paused=!g_paused; DebugLog("pause","\"paused\":%s",g_paused?"true":"false"); }
         if(IsKeyPressed(KEY_G)){ g_god=!g_god; DebugLog("mode","\"god\":%s",g_god?"true":"false"); }
         if(IsKeyPressed(KEY_H)) g_hitboxes=!g_hitboxes;
-        if(IsKeyPressed(KEY_F)){ g_fx=!g_fx; DebugLog("mode","\"fx\":%s",g_fx?"true":"false"); }
+        if(IsKeyPressed(KEY_F)){ g_fx=!g_fx; SaveOptions(); DebugLog("mode","\"fx\":%s",g_fx?"true":"false"); }
         if(IsKeyPressed(KEY_N)){ g_noEnemies=!g_noEnemies; DebugLog("mode","\"noEnemies\":%s",g_noEnemies?"true":"false"); }
         if(IsKeyPressed(KEY_R)){ RespawnAtCheckpoint(); g_won=0; g_areaClear=0; }
 
