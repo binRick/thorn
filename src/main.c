@@ -602,7 +602,13 @@ static void PlayerMoveY(void){
     int c0=(int)floorf(P.x/TILE), c1=(int)floorf((P.x+PW-1)/TILE);
     if(P.vy>0){ int r=(int)floorf((P.y+PH)/TILE); for(int c=c0;c<=c1;c++) if(SolidAt(c,r)){ P.y=r*TILE-PH-0.01f; P.vy=0; P.onGround=1; break; } }
     else if(P.vy<0){ int r=(int)floorf(P.y/TILE); for(int c=c0;c<=c1;c++) if(SolidAt(c,r)){ P.y=(r+1)*TILE+0.01f; P.vy=0; break; } }
-    if(P.onGround && vy0>300.0f) SndPlay(SND_LAND);
+    if(P.onGround && vy0>300.0f){   // landed from a real fall: thud + dust kick + impact shake
+        SndPlay(SND_LAND);
+        DebugLog("land","\"vy\":%.0f",vy0);
+        float cx=P.x+PW*0.5f, fy=P.y+PH;
+        Emit(cx,fy,(vy0>650?10:vy0>450?6:3),40.0f,0.5f,1.6f,(Color){170,160,140,255},0,0);   // dust (gated inside)
+        if(vy0>520 && g_fx && !g_headless){ float s=(vy0-520)/90.0f; if(s>4)s=4; if(s>g_shake) g_shake=s; }
+    }
     if(P.onGround && vy0>FALL_HURT){ int dmg=(int)((vy0-FALL_HURT)/45.0f); if(dmg>0){ DebugLog("fall","\"vy\":%.0f,\"dmg\":%d,\"fatal\":false",vy0,dmg); HurtPlayer(dmg,"fall"); } }
 }
 
