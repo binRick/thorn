@@ -501,9 +501,15 @@ static const char* PStateName(void){
 }
 
 // ---- Combat -----------------------------------------------------------------
-enum { SND_FIRE, SND_DRY, SND_RELOAD, SND_ENEMYFIRE, SND_HIT, SND_DEATH, SND_PICKUP, SND_LEVER, SND_BOMB, SND_UPGRADE, SND_JUMP, SND_MELEE, SND_STEP, SND_LAND, SND_N };
+enum { SND_FIRE, SND_DRY, SND_RELOAD, SND_ENEMYFIRE, SND_HIT, SND_DEATH, SND_PICKUP, SND_LEVER, SND_BOMB, SND_UPGRADE, SND_JUMP, SND_MELEE, SND_STEP, SND_LAND, SND_PORTAL, SND_N };
 static int   g_audio=0; static Sound g_snd[SND_N];   // filled by InitAudio() (Chunk E); no-op until then
+static Music g_runMus, g_walkMus; static int g_runMusOk=0, g_walkMusOk=0;   // looping run/walk footstep samples
+#define MAX_DEATHSND 8
+static Sound g_deathSnd[MAX_DEATHSND]; static int g_deathSndN=0;   // enemy-death samples (random pick); 0 -> synth
+static Sound g_hurtSnd[MAX_DEATHSND];  static int g_hurtSndN=0;     // player-hurt samples (random pick); 0 -> SND_HIT
 static void SndPlay(int id){ if(g_audio && id>=0 && id<SND_N) PlaySound(g_snd[id]); }
+static void PlayEnemyDeath(void){ if(!g_audio) return; if(g_deathSndN>0) PlaySound(g_deathSnd[rand()%g_deathSndN]); else SndPlay(SND_DEATH); }
+static void PlayPlayerHurt(void){ if(!g_audio) return; if(g_hurtSndN>0) PlaySound(g_hurtSnd[rand()%g_hurtSndN]); else SndPlay(SND_HIT); }
 
 static void Fire(int dir){
     if(P.fireCD>0 || P.reloadT>0) return;
@@ -525,7 +531,7 @@ static void Fire(int dir){
     SpawnShot(mx,my,endx,my,0);
     Emit(mx,my,7,360,0.16f,2.2f,(Color){255,220,130,255},1,0); Emit(P.x+PW*0.5f,gunY(),1,110,0.6f,1.6f,(Color){210,180,90,255},0,1);   // muzzle sparks + shell casing
     if(hitIdx>=0){ Enemy*e=&g_en[hitIdx]; e->hp-=dmg; e->hitFlash=0.12f; FloatDmg(e->x+EW*0.5f,e->y,dmg);
-        if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); Emit(e->x+EW*0.5f,e->y+EH*0.5f,16,300,0.6f,2.6f,(Color){170,30,30,255},0,1); g_shake=fmaxf(g_shake,7.0f); Ev("enemy %d killed",hitIdx); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"x\":%.1f,\"y\":%.1f",hitIdx,e->x,e->y); if(e->type==3){ g_victory=1; g_won=1; g_shake=20.0f; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
+        if(e->hp<=0){ e->alive=0; e->st="DEAD"; PlayEnemyDeath(); Emit(e->x+EW*0.5f,e->y+EH*0.5f,16,300,0.6f,2.6f,(Color){170,30,30,255},0,1); g_shake=fmaxf(g_shake,7.0f); Ev("enemy %d killed",hitIdx); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"x\":%.1f,\"y\":%.1f",hitIdx,e->x,e->y); if(e->type==3){ g_victory=1; g_won=1; g_shake=20.0f; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
         else { SndPlay(SND_HIT); Emit(e->x+EW*0.5f,e->y+EH*0.5f,7,240,0.35f,2.0f,(Color){200,40,40,255},0,1); DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":%d,\"hp\":%d",hitIdx,dmg,e->hp); }
     }
     DebugLog("fire","\"dir\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"face\":%d,\"dmg\":%d,\"mag\":%d,\"hit\":%s,\"target\":%d",
@@ -537,7 +543,7 @@ static void Fire(int dir){
 static void HurtPlayer(int dmg,const char*cause){
     if(g_god||P.iframes>0||P.dead) return;
     P.hp-=dmg; P.iframes=IFRAMES; P.hurtT=0.25f;
-    Emit(pcx(),pcy(),8,240,0.4f,2.2f,(Color){200,60,60,255},0,1); g_shake=fmaxf(g_shake,5.0f);
+    Emit(pcx(),pcy(),8,240,0.4f,2.2f,(Color){200,60,60,255},0,1); g_shake=fmaxf(g_shake,5.0f); PlayPlayerHurt();
     DebugLog("hit","\"who\":\"player\",\"dmg\":%d,\"hp\":%d,\"cause\":\"%s\"",dmg,P.hp,cause);
     Ev("player hit -%d (%s)",dmg,cause);
     if(P.hp<=0){ P.hp=0; P.dead=1; P.deadT=0; DebugLog("death","\"who\":\"player\",\"x\":%.1f,\"y\":%.1f,\"cause\":\"%s\"",P.x,P.y,cause); Ev("player DIED (%s)",cause); }
@@ -552,7 +558,7 @@ static void Melee(void){
         if((ex-pcx())*P.face>0 && fabsf(ex-pcx())<40.0f+EW*0.5f && fabsf(ey-pcy())<TILE*0.8f){ hit=i; break; } }
     if(hit>=0){ Enemy*e=&g_en[hit]; e->hp-=45; e->hitFlash=0.12f; g_shake=fmaxf(g_shake,6.0f); FloatDmg(e->x+EW*0.5f,e->y,45);
         Emit(e->x+EW*0.5f,e->y+EH*0.5f,8,240,0.35f,2.0f,(Color){200,40,40,255},0,1);
-        if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"melee\"",hit); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
+        if(e->hp<=0){ e->alive=0; e->st="DEAD"; PlayEnemyDeath(); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"melee\"",hit); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
         else DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":45,\"cause\":\"melee\"",hit); }
     DebugLog("melee","\"x\":%.1f,\"face\":%d,\"hit\":%s",pcx(),P.face,hit>=0?"true":"false"); Ev("knife%s",hit>=0?" HIT":"");
 }
@@ -568,7 +574,7 @@ static void ExplodeBomb(float bx,float by){
     }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive) continue; float ex=e->x+EW*0.5f,ey=e->y+EH*0.5f;
         if((ex-bx)*(ex-bx)+(ey-by)*(ey-by)<BOMB_RADIUS*BOMB_RADIUS){ e->hp-=BOMB_DMG; e->hitFlash=0.12f; hits++; FloatDmg(e->x+EW*0.5f,e->y,BOMB_DMG);
-            if(e->hp<=0){ e->alive=0; e->st="DEAD"; DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"bomb\"",i); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } } } }
+            if(e->hp<=0){ e->alive=0; e->st="DEAD"; PlayEnemyDeath(); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"bomb\"",i); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } } } }
     float pdx=pcx()-bx, pdy=pcy()-by; if(pdx*pdx+pdy*pdy<BOMB_RADIUS*BOMB_RADIUS) HurtPlayer(30,"bomb");
     g_boomT=0.35f; g_boomX=bx; g_boomY=by; SndPlay(SND_BOMB);
     Emit(bx,by,18,90,0.9f,5.0f,(Color){92,86,80,255},0,0); Emit(bx,by,22,420,0.5f,3.0f,(Color){255,180,80,255},1,0); Emit(bx,by,14,300,0.8f,2.4f,(Color){120,110,100,255},0,1); g_shake=16.0f;
@@ -670,7 +676,7 @@ static void UpdatePlayer(Input in){
                 if(D->locked){ DebugLog("door","\"id\":%d,\"unlocked\":\"%s\"",D->id,JStr(D->key)); Ev("unlocked %s door",D->key); }
                 if(D->needShards>0){ DebugLog("door","\"id\":%d,\"gateOpen\":%d",D->id,D->needShards); Msg(1.6f,"The Daystone gate opens!"); }
                 if(D->target[0]==0||!strcmp(D->target,"exit")){ g_areaClear=1; g_won=1; DebugLog("door","\"id\":%d,\"areaExit\":true",D->id); Ev("AREA CLEAR"); }
-                else { snprintf(g_pendTarget,sizeof g_pendTarget,"%s",D->target); g_pendSpawn=D->targetSpawn; g_pendActive=1;
+                else { snprintf(g_pendTarget,sizeof g_pendTarget,"%s",D->target); g_pendSpawn=D->targetSpawn; g_pendActive=1; SndPlay(SND_PORTAL);
                        DebugLog("door","\"id\":%d,\"to\":\"%s\",\"spawn\":%d",D->id,JStr(D->target),D->targetSpawn); }
             }
         }
@@ -719,7 +725,7 @@ static void UpdatePlayer(Input in){
 
     P.vy=fminf(P.vy+GRAV*DT,MAXFALL);
     PlayerMoveX(); PlayerMoveY(); ResolveLifts();
-    { static float stepT=0; if(P.onGround&&!P.inCover&&fabsf(P.vx)>WALK_SPD*0.6f){ stepT-=DT; if(stepT<=0){ SndPlay(SND_STEP); stepT=0.30f; } } else stepT=0; }   // footsteps
+    { static float stepT=0; if(P.onGround&&!P.inCover&&fabsf(P.vx)>WALK_SPD*0.6f){ stepT-=DT; if(stepT<=0){ if(!(g_runMusOk||g_walkMusOk)) SndPlay(SND_STEP); stepT=0.30f; } } else stepT=0; }   // synth footsteps (fallback when no looping samples)
 
     int feetRow=(int)floorf((P.y+PH+1)/TILE)-1, ccol=(int)floorf(pcx()/TILE);
     if(P.onGround && feetRow>=0 && ccol>=0 && g_spike[feetRow][ccol]) HurtPlayer(SPIKE_DMG,"spike");
@@ -1305,11 +1311,29 @@ static void InitAudio(void){
     g_snd[SND_LEVER]     = GenTone(0.12f,200,120,1,0.6f);
     g_snd[SND_BOMB]      = GenTone(0.50f,120, 40,2,1.0f);
     g_snd[SND_UPGRADE]   = GenTone(0.30f,500,900,0,0.6f);
-    g_snd[SND_JUMP]      = GenTone(0.14f,300,520,0,0.4f);
+    g_snd[SND_JUMP]      = FileExists("assets/sounds/jump.mp3") ? LoadSound("assets/sounds/jump.mp3") : GenTone(0.14f,300,520,0,0.4f);
     g_snd[SND_MELEE]     = GenTone(0.10f,600,180,2,0.5f);
     g_snd[SND_STEP]      = GenTone(0.05f,110, 70,2,0.22f);
-    g_snd[SND_LAND]      = GenTone(0.10f,150, 55,2,0.40f);
+    g_snd[SND_LAND]      = FileExists("assets/sounds/land.mp3")   ? LoadSound("assets/sounds/land.mp3")   : GenTone(0.10f,150,55,2,0.40f);
+    g_snd[SND_PORTAL]    = FileExists("assets/sounds/portal.mp3") ? LoadSound("assets/sounds/portal.mp3") : GenTone(0.5f,300,1400,0,0.6f);
+    // Looping footstep samples (run / Shift-walk).
+    if(FileExists("assets/sounds/run_concrete.mp3")){ g_runMus =LoadMusicStream("assets/sounds/run_concrete.mp3"); g_runMus.looping=true;  SetMusicVolume(g_runMus,0.60f);  g_runMusOk=1; }
+    if(FileExists("assets/sounds/walk.mp3")){         g_walkMus=LoadMusicStream("assets/sounds/walk.mp3");        g_walkMus.looping=true; SetMusicVolume(g_walkMus,0.55f); g_walkMusOk=1; }
+    // Enemy-death samples: assets/sounds/enemy_death_<n>.mp3, picked at random (drop in more to vary deaths).
+    for(int i=0;i<MAX_DEATHSND;i++){ char p[64]; snprintf(p,sizeof p,"assets/sounds/enemy_death_%d.mp3",i); if(!FileExists(p)) break; g_deathSnd[g_deathSndN++]=LoadSound(p); }
+    for(int i=0;i<MAX_DEATHSND;i++){ char p[64]; snprintf(p,sizeof p,"assets/sounds/player_hurt_%d.mp3",i); if(!FileExists(p)) break; g_hurtSnd[g_hurtSndN++]=LoadSound(p); }
     g_audio=1;
+}
+
+// Loop the concrete-running / walking samples while the hero moves on the ground
+// (continuous Music streams, not per-step blips). Windowed only.
+static void UpdateFootstepAudio(void){
+    if(!g_audio || g_headless) return;
+    int moving  = P.onGround && !P.inCover && !P.dead && !g_paused && !g_won && fabsf(P.vx) > 14.0f;
+    int running = moving && fabsf(P.vx) > WALK_SPD + 10.0f;
+    int walking = moving && !running;
+    if(g_runMusOk){  if(running){ if(!IsMusicStreamPlaying(g_runMus))  PlayMusicStream(g_runMus);  UpdateMusicStream(g_runMus);  } else if(IsMusicStreamPlaying(g_runMus))  StopMusicStream(g_runMus); }
+    if(g_walkMusOk){ if(walking){ if(!IsMusicStreamPlaying(g_walkMus)) PlayMusicStream(g_walkMus); UpdateMusicStream(g_walkMus); } else if(IsMusicStreamPlaying(g_walkMus)) StopMusicStream(g_walkMus); }
 }
 
 // ---- Self-test: validate the whole multi-area room graph (no window) --------
@@ -1358,6 +1382,7 @@ static void Frame(void){
         BeginDrawing(); ClearBackground((Color){10,11,16,255}); DrawTitle(); EndDrawing();
         return;
     }
+    UpdateFootstepAudio();   // loop run/walk samples while the hero moves
     if(IsKeyPressed(KEY_GRAVE)||IsKeyPressed(KEY_TAB)) g_overlay=!g_overlay;
     if(IsKeyPressed(KEY_P)){ g_paused=!g_paused; g_pauseSel=0; DebugLog("pause","\"paused\":%s",g_paused?"true":"false"); }
     if(g_paused){   // self-contained pause menu (Resume / Restart checkpoint / Quit to title)
@@ -1484,7 +1509,11 @@ int main(int argc,char**argv){
 
     DebugLog("shutdown","\"frames\":%ld",g_frame);
     if(g_dbg && g_dbg!=stderr) fclose(g_dbg);
-    if(g_audio){ for(int i=0;i<SND_N;i++) UnloadSound(g_snd[i]); CloseAudioDevice(); }
+    if(g_audio){ for(int i=0;i<SND_N;i++) UnloadSound(g_snd[i]);
+        for(int i=0;i<g_deathSndN;i++) UnloadSound(g_deathSnd[i]);
+        for(int i=0;i<g_hurtSndN;i++) UnloadSound(g_hurtSnd[i]);
+        if(g_runMusOk) UnloadMusicStream(g_runMus); if(g_walkMusOk) UnloadMusicStream(g_walkMus);
+        CloseAudioDevice(); }
     CloseWindow();
     return 0;
 }

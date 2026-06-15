@@ -9,5 +9,27 @@ shotgun_fire.mp3
            license (CC0 / CC-BY) for this specific sound on freesound.org before
            redistributing, and add attribution here if CC-BY.
 
+run_concrete.mp3   — running footstep loop (looped Music while the hero runs)
+                     original: freesoundsxx-running-on-concrete-268478.mp3
+walk.mp3           — walking footstep loop (looped Music while Shift-walking)
+                     original: u_3x9ga8wevj-walking-sound-effect-272246.mp3
+land.mp3           — landing after a fall/jump (SND_LAND)
+                     original: freesound_community-land-81509.mp3
+jump.mp3           — jump (SND_JUMP)
+                     original: freesound_community-jump-scare-scream-82738.mp3
+portal.mp3         — entering a door/portal transition (SND_PORTAL)
+                     original: dragon-studio-sci-fi-portal-jump-01-416163.mp3
+enemy_death_0.mp3  — enemy death (random pick); dead air trimmed via ffmpeg
+                     original: vinodadora-male-death-sound-128357.mp3
+enemy_death_1.mp3  — enemy death (random pick); dead air trimmed via ffmpeg
+                     original: universfield-dramatic-death-collapse-352720.mp3
+player_hurt_0.mp3  — player takes damage (random pick)
+                     original: freesound_community-male_hurt7-48124.mp3
+
+  All of the above are from the Freesound community pool / the user's own library.
+  Confirm each sound's exact license (CC0 / CC-BY) on freesound.org before
+  redistributing, and add attribution here if CC-BY. enemy_death_<n>.mp3 and
+  player_hurt_<n>.mp3 are random-pick arrays — drop in more numbered files to vary.
+
 All other sound effects are synthesized procedurally in code (src/main.c,
 GenTone / InitAudio) and are original to this project.
