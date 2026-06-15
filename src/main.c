@@ -26,6 +26,9 @@
 #include <string.h>
 #include <stdarg.h>
 #include <math.h>
+#ifdef __EMSCRIPTEN__
+  #include <emscripten/emscripten.h>   // browser drives the main loop
+#endif
 
 #if defined(RAYLIB_VERSION_MAJOR) && RAYLIB_VERSION_MAJOR >= 6
   #define THORN_RAYLIB "6.0"
@@ -1337,6 +1340,72 @@ static int RunSelfTest(void){
     return errors;
 }
 
+// One windowed-loop iteration, factored out so the browser (emscripten) can drive
+// it via emscripten_set_main_loop while desktop calls it from a while-loop. The
+// behaviour is identical on desktop — `continue` simply becomes `return`.
+static float g_acc=0; static int g_shotDone=0; static int g_running=1;
+static void Frame(void){
+    if(g_scene==SCENE_TITLE){
+        if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W))   g_menuSel=(g_menuSel+2)%3;
+        if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) g_menuSel=(g_menuSel+1)%3;
+        if(IsKeyPressed(KEY_LEFT)||IsKeyPressed(KEY_A)) { g_diff=(g_diff+2)%3; SaveOptions(); }
+        if(IsKeyPressed(KEY_RIGHT)||IsKeyPressed(KEY_D)){ g_diff=(g_diff+1)%3; SaveOptions(); }
+        if(IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE)){
+            if(g_menuSel==0){ NewGame(); g_scene=SCENE_PLAY; }
+            else if(g_menuSel==1){ ContinueGame(); g_scene=SCENE_PLAY; }
+            else g_running=0;
+        }
+        BeginDrawing(); ClearBackground((Color){10,11,16,255}); DrawTitle(); EndDrawing();
+        return;
+    }
+    if(IsKeyPressed(KEY_GRAVE)||IsKeyPressed(KEY_TAB)) g_overlay=!g_overlay;
+    if(IsKeyPressed(KEY_P)){ g_paused=!g_paused; g_pauseSel=0; DebugLog("pause","\"paused\":%s",g_paused?"true":"false"); }
+    if(g_paused){   // self-contained pause menu (Resume / Restart checkpoint / Quit to title)
+        if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W))   g_pauseSel=(g_pauseSel+2)%3;
+        if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) g_pauseSel=(g_pauseSel+1)%3;
+        int go=IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE);
+        if(IsKeyPressed(KEY_BACKSPACE)){ g_pauseSel=2; go=1; }   // legacy shortcut: backspace -> title
+        if(go){
+            if(g_pauseSel==1){ RespawnAtCheckpoint(); g_won=0; g_areaClear=0; g_paused=0; DebugLog("pause","\"action\":\"restart\""); }
+            else if(g_pauseSel==2){ g_scene=SCENE_TITLE; g_paused=0; g_menuSel=0; DebugLog("pause","\"action\":\"title\""); return; }
+            else { g_paused=0; DebugLog("pause","\"paused\":false"); }
+        }
+        BeginDrawing(); ClearBackground((Color){20,22,30,255}); DrawWorld(); DrawHUD(); DrawOverlay(); EndDrawing();
+        return;
+    }
+    if(IsKeyPressed(KEY_G)){ g_god=!g_god; DebugLog("mode","\"god\":%s",g_god?"true":"false"); }
+    if(IsKeyPressed(KEY_H)) g_hitboxes=!g_hitboxes;
+    if(IsKeyPressed(KEY_F)){ g_fx=!g_fx; SaveOptions(); DebugLog("mode","\"fx\":%s",g_fx?"true":"false"); }
+    if(IsKeyPressed(KEY_N)){ g_noEnemies=!g_noEnemies; DebugLog("mode","\"noEnemies\":%s",g_noEnemies?"true":"false"); }
+    if(IsKeyPressed(KEY_R)){ RespawnAtCheckpoint(); g_won=0; g_areaClear=0; }
+
+    Input in = g_demo?DemoInput():KeyInput();
+
+    float ft=GetFrameTime(); if(ft>0.05f) ft=0.05f;
+    if(g_areaCardT>0) g_areaCardT-=ft;
+    if(!g_paused && !g_won){
+        g_acc+=ft; int steps=0;
+        while(g_acc>=DT && steps<5){
+            SimStep(in);
+            in.up=in.down=in.fireF=in.fireB=in.use=in.cycle=in.jump=in.melee=in.throwb=0;   // consume edges after first sub-step
+            g_acc-=DT; steps++; g_frame++;
+            if((g_rate>0 && g_frame%g_rate==0) || g_rate<=0) EmitState();
+            if(g_maxFrames && g_frame>=g_maxFrames) g_running=0;
+            if(g_won) break;   // stop sub-stepping once the area is cleared
+        }
+    } else UpdateCam();
+
+    BeginDrawing();
+    ClearBackground((Color){20,22,30,255});
+    DrawWorld(); DrawHUD(); DrawAreaCard(); DrawOverlay();
+    EndDrawing();
+
+    if(g_shotFrame && g_frame>=g_shotFrame && !g_shotDone){ TakeScreenshot("thorn-shot.png"); g_shotDone=1; DebugLog("shot","\"file\":\"thorn-shot.png\",\"frame\":%ld",g_frame); }
+#ifdef __EMSCRIPTEN__
+    if(!g_running) emscripten_cancel_main_loop();
+#endif
+}
+
 // ---- main -------------------------------------------------------------------
 int main(int argc,char**argv){
     int dump=0,genassets=0,docontinue=0; char pwarg[16]="";
@@ -1407,65 +1476,11 @@ int main(int argc,char**argv){
         return 0;
     }
 
-    float acc=0; int shotDone=0; int running=1;
-    while(running && !WindowShouldClose()){
-        if(g_scene==SCENE_TITLE){
-            if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W))   g_menuSel=(g_menuSel+2)%3;
-            if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) g_menuSel=(g_menuSel+1)%3;
-            if(IsKeyPressed(KEY_LEFT)||IsKeyPressed(KEY_A)) { g_diff=(g_diff+2)%3; SaveOptions(); }
-            if(IsKeyPressed(KEY_RIGHT)||IsKeyPressed(KEY_D)){ g_diff=(g_diff+1)%3; SaveOptions(); }
-            if(IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE)){
-                if(g_menuSel==0){ NewGame(); g_scene=SCENE_PLAY; }
-                else if(g_menuSel==1){ ContinueGame(); g_scene=SCENE_PLAY; }
-                else running=0;
-            }
-            BeginDrawing(); ClearBackground((Color){10,11,16,255}); DrawTitle(); EndDrawing();
-            continue;
-        }
-        if(IsKeyPressed(KEY_GRAVE)||IsKeyPressed(KEY_TAB)) g_overlay=!g_overlay;
-        if(IsKeyPressed(KEY_P)){ g_paused=!g_paused; g_pauseSel=0; DebugLog("pause","\"paused\":%s",g_paused?"true":"false"); }
-        if(g_paused){   // self-contained pause menu (Resume / Restart checkpoint / Quit to title)
-            if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W))   g_pauseSel=(g_pauseSel+2)%3;
-            if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) g_pauseSel=(g_pauseSel+1)%3;
-            int go=IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE);
-            if(IsKeyPressed(KEY_BACKSPACE)){ g_pauseSel=2; go=1; }   // legacy shortcut: backspace -> title
-            if(go){
-                if(g_pauseSel==1){ RespawnAtCheckpoint(); g_won=0; g_areaClear=0; g_paused=0; DebugLog("pause","\"action\":\"restart\""); }
-                else if(g_pauseSel==2){ g_scene=SCENE_TITLE; g_paused=0; g_menuSel=0; DebugLog("pause","\"action\":\"title\""); continue; }
-                else { g_paused=0; DebugLog("pause","\"paused\":false"); }
-            }
-            BeginDrawing(); ClearBackground((Color){20,22,30,255}); DrawWorld(); DrawHUD(); DrawOverlay(); EndDrawing();
-            continue;
-        }
-        if(IsKeyPressed(KEY_G)){ g_god=!g_god; DebugLog("mode","\"god\":%s",g_god?"true":"false"); }
-        if(IsKeyPressed(KEY_H)) g_hitboxes=!g_hitboxes;
-        if(IsKeyPressed(KEY_F)){ g_fx=!g_fx; SaveOptions(); DebugLog("mode","\"fx\":%s",g_fx?"true":"false"); }
-        if(IsKeyPressed(KEY_N)){ g_noEnemies=!g_noEnemies; DebugLog("mode","\"noEnemies\":%s",g_noEnemies?"true":"false"); }
-        if(IsKeyPressed(KEY_R)){ RespawnAtCheckpoint(); g_won=0; g_areaClear=0; }
-
-        Input in = g_demo?DemoInput():KeyInput();
-
-        float ft=GetFrameTime(); if(ft>0.05f) ft=0.05f;
-        if(g_areaCardT>0) g_areaCardT-=ft;
-        if(!g_paused && !g_won){
-            acc+=ft; int steps=0;
-            while(acc>=DT && steps<5){
-                SimStep(in);
-                in.up=in.down=in.fireF=in.fireB=in.use=in.cycle=in.jump=in.melee=in.throwb=0;   // consume edges after first sub-step
-                acc-=DT; steps++; g_frame++;
-                if((g_rate>0 && g_frame%g_rate==0) || g_rate<=0) EmitState();
-                if(g_maxFrames && g_frame>=g_maxFrames) running=0;
-                if(g_won) break;   // stop sub-stepping once the area is cleared
-            }
-        } else UpdateCam();
-
-        BeginDrawing();
-        ClearBackground((Color){20,22,30,255});
-        DrawWorld(); DrawHUD(); DrawAreaCard(); DrawOverlay();
-        EndDrawing();
-
-        if(g_shotFrame && g_frame>=g_shotFrame && !shotDone){ TakeScreenshot("thorn-shot.png"); shotDone=1; DebugLog("shot","\"file\":\"thorn-shot.png\",\"frame\":%ld",g_frame); }
-    }
+#ifdef __EMSCRIPTEN__
+    emscripten_set_main_loop(Frame, 0, 1);   // browser pumps frames; shutdown below is desktop-only
+#else
+    while(g_running && !WindowShouldClose()) Frame();   // Frame() is the loop body (see above)
+#endif
 
     DebugLog("shutdown","\"frames\":%ld",g_frame);
     if(g_dbg && g_dbg!=stderr) fclose(g_dbg);

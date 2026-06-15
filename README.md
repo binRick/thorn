@@ -41,6 +41,20 @@ PNGs with your own / any CC0 pack (same filenames). See `assets/sprites/CREDITS.
 Brew only ships raylib 5.5, so the first `./run.sh` builds raylib **6.0** from
 source into `vendor/` (a few minutes, once). After that, launches are instant.
 
+### Web (WebAssembly)
+
+```bash
+make web                                   # needs: brew install emscripten
+python3 -m http.server -d build/web        # then open http://localhost:8000/thorn.html
+```
+
+`make web` rebuilds raylib for `PLATFORM_WEB` into a **separate** archive
+(`libraylib.web.a`; the desktop build is untouched) and compiles the game to
+`build/web/thorn.{html,js,wasm,data}` with the level/sprite/sound files preloaded
+into the virtual filesystem. The same `src/main.c` drives both targets — the
+browser pumps the loop via `emscripten_set_main_loop`, desktop uses a `while`
+loop. Click the canvas first so it captures the keyboard.
+
 ## Controls
 
 | Action | Keys |
@@ -90,6 +104,7 @@ CC0 sprite PNGs), `--nofx` (disable visual FX), `--skiptitle` (skip the menu),
 run.sh debug.sh Makefile   entry points + build (Makefile `raylib6` vendors raylib 6.0)
 DESIGN.md README.md         design doc + this file
 src/main.c                  the game (single translation unit)
+src/shell.html              page template for the `make web` (WebAssembly) build
 levels/<area>/*.lvl         room files for the four areas (external level data)
 assets/sprites/*.png        drop-in CC0 sprite strips (reskin by replacing these)
 vendor/                     vendored raylib 6.0 (gitignored, rebuilt on demand)

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thorn — a cinematic-platformer tribute</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0b10;color:#cdd6e6;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px;}
+  h1{margin:6px 0 0;font-size:22px;letter-spacing:3px;color:#d2b978;font-weight:600;}
+  p.sub{margin:0;color:#8893a6;font-size:13px;}
+  canvas.emscripten{border:1px solid #232838;background:#000;display:block;
+    image-rendering:pixelated;max-width:96vw;height:auto;box-shadow:0 8px 40px #0008;}
+  .keys{color:#6f7a90;font-size:12px;max-width:680px;text-align:center;line-height:1.7;}
+  .keys b{color:#9fb0cc;font-weight:600;}
+  #status{color:#d2b978;font-size:13px;min-height:18px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>T H O R N</h1>
+  <p class="sub">an original cinematic-platformer tribute · raylib 6 · WebAssembly</p>
+  <canvas class="emscripten" id="canvas" width="1280" height="720"
+          oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+  <div id="status">loading…</div>
+  <div class="keys">
+    <b>Move</b> A/D or ←/→ &nbsp;·&nbsp; <b>Jump</b> Space &nbsp;·&nbsp; <b>Up/Down</b> W/S
+    &nbsp;·&nbsp; <b>Fire</b> J (K = over-shoulder) &nbsp;·&nbsp; <b>Knife</b> V
+    &nbsp;·&nbsp; <b>Bomb</b> E / throw T &nbsp;·&nbsp; <b>Pause</b> P
+    <br>Click the canvas first so it receives the keyboard.
+  </div>
+</div>
+<script>
+  var statusEl = document.getElementById('status');
+  var Module = {
+    canvas: (function(){ return document.getElementById('canvas'); })(),
+    setStatus: function(t){ if(statusEl) statusEl.textContent = t || ''; },
+    print: function(t){ console.log(t); },
+    printErr: function(t){ console.error(t); },
+  };
+  Module.setStatus('downloading…');
+  window.onerror = function(){ Module.setStatus('error — see the browser console'); };
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>
