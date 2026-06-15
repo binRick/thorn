@@ -108,7 +108,7 @@ static const char *JStr(const char *s){
 // type: 0=SKARL (stationary shooter) 1=BRUTE (advances) 2=SENTRY (uses cover)
 typedef struct { float x,y,vx,vy; int face; int hp; int alive; int type; int phase; int onGround; int inCover; float coverT; float fireT; float hitFlash; const char*st; } Enemy;
 typedef struct { int c,r; char kind; int alive; } Pickup;     // H K B * a u U
-typedef struct { float x,y,fuse; int active; } Bomb;          // placed explosive
+typedef struct { float x,y,vx,vy,fuse; int active; } Bomb;    // placed or thrown explosive
 typedef struct { int c,r; int freed; } Npc;
 typedef struct { float x1,y1,x2,y2; float age; int owner; } Shot; // owner 0=player 1=enemy
 
@@ -224,7 +224,7 @@ static void Ev(const char*fmt,...){ va_list ap; va_start(ap,fmt); vsnprintf(g_ev
 
 // ---- Input ------------------------------------------------------------------
 typedef struct { int left,right,walk;            // held
-                 int up,down,fireF,fireB,use,cycle,jump,melee; } Input; // edge
+                 int up,down,fireF,fireB,use,cycle,jump,melee,throwb; } Input; // edge
 
 static Input KeyInput(void){
     Input in={0};
@@ -237,6 +237,7 @@ static Input KeyInput(void){
     in.fireB = IsKeyPressed(KEY_K);
     in.jump  = IsKeyPressed(KEY_SPACE);
     in.melee = IsKeyPressed(KEY_V);
+    in.throwb= IsKeyPressed(KEY_T);
     in.use   = IsKeyPressed(KEY_E)||IsKeyPressed(KEY_ENTER);
     in.cycle = IsKeyPressed(KEY_Q);
     return in;
@@ -257,6 +258,7 @@ static Input DemoFrameInput(long f){
     if(f%22==3)  in.up=1;     // ~5.5 Hz: throws levers / uses doors / climbs in passing
     if(f%440==220) in.fireB=1;
     if(f%80==10)   in.melee=1; // occasional knife swing
+    if(f%520==200) in.throwb=1; // occasional bomb toss
     if(f%600==90)  in.use=1;  // occasionally drop a bomb (exercises the explosive path)
     if(f%140==30)  in.jump=1; // occasional jump (exercises the airborne path)
     return in;
@@ -532,15 +534,26 @@ static void ExplodeBomb(float bx,float by){
     Emit(bx,by,18,90,0.9f,5.0f,(Color){92,86,80,255},0,0); Emit(bx,by,22,420,0.5f,3.0f,(Color){255,180,80,255},1,0); Emit(bx,by,14,300,0.8f,2.4f,(Color){120,110,100,255},0,1); g_shake=16.0f;
     DebugLog("bomb","\"explode\":[%.0f,%.0f],\"destroyed\":%d,\"enemiesHit\":%d",bx,by,destroyed,hits); Ev("BOOM (-%d walls)",destroyed);
 }
+static int BombSlot(void){ for(int i=0;i<MAXBOMB;i++) if(!g_bomb[i].active) return i; return -1; }
 static void PlaceBomb(void){
-    if(P.bombs<=0) return;
-    int slot=-1; for(int i=0;i<MAXBOMB;i++) if(!g_bomb[i].active){ slot=i; break; } if(slot<0) return;
-    P.bombs--; g_bomb[slot]=(Bomb){pcx(), P.y+PH-8, BOMB_FUSE, 1};
+    if(P.bombs<=0) return; int slot=BombSlot(); if(slot<0) return;
+    P.bombs--; g_bomb[slot]=(Bomb){pcx(), P.y+PH-8, 0,0, BOMB_FUSE, 1};
     DebugLog("bomb","\"place\":[%.0f,%.0f],\"fuse\":%.2f",g_bomb[slot].x,g_bomb[slot].y,(double)BOMB_FUSE); Ev("bomb placed");
+}
+static void ThrowBomb(void){   // lob in an arc in the facing direction
+    if(P.bombs<=0) return; int slot=BombSlot(); if(slot<0) return;
+    P.bombs--; g_bomb[slot]=(Bomb){pcx()+P.face*10, gunY(), P.face*270.0f, -250.0f, BOMB_FUSE, 1};
+    SndPlay(SND_MELEE); DebugLog("bomb","\"throw\":[%.0f,%.0f],\"face\":%d",g_bomb[slot].x,g_bomb[slot].y,P.face); Ev("bomb thrown");
 }
 static void UpdateBombs(void){
     if(g_boomT>0) g_boomT-=DT;
-    for(int i=0;i<MAXBOMB;i++) if(g_bomb[i].active){ g_bomb[i].fuse-=DT; if(g_bomb[i].fuse<=0){ g_bomb[i].active=0; ExplodeBomb(g_bomb[i].x,g_bomb[i].y); } }
+    for(int i=0;i<MAXBOMB;i++) if(g_bomb[i].active){ Bomb*b=&g_bomb[i];
+        b->vy=fminf(b->vy+GRAV*DT,MAXFALL);
+        b->x+=b->vx*DT; if(SolidAt((int)floorf(b->x/TILE),(int)floorf(b->y/TILE))){ b->x-=b->vx*DT; b->vx=-b->vx*0.4f; }   // bounce off walls
+        b->y+=b->vy*DT; int rr=(int)floorf(b->y/TILE), rc=(int)floorf(b->x/TILE);
+        if(SolidAt(rc,rr)){ b->y=rr*TILE-0.01f; b->vy=0; b->vx*=0.7f; }   // rest on ground
+        b->fuse-=DT; if(b->fuse<=0){ b->active=0; ExplodeBomb(b->x,b->y); }
+    }
 }
 
 // ---- Player update ----------------------------------------------------------
@@ -655,6 +668,7 @@ static void UpdatePlayer(Input in){
     if(in.fireB) Fire(-P.face);
     if(in.use)   PlaceBomb();   // E: drop a bomb (blows cracked walls / clusters)
     if(in.melee) Melee();       // V: knife
+    if(in.throwb) ThrowBomb();  // T: lob a bomb
     if(P.jumpBuf>0 && (P.coyote>0||P.onLift>=0) && P.climbT<=0){ P.vy=-JUMP_V; P.onGround=0; P.onLift=-1; P.jumpBuf=0; P.coyote=0; SndPlay(SND_JUMP); DebugLog("jump","\"x\":%.1f,\"y\":%.1f",P.x,P.y); Ev("jump"); }
 
     P.vy=fminf(P.vy+GRAV*DT,MAXFALL);
@@ -1128,7 +1142,7 @@ static void DrawHUD(void){
     DrawText(TextFormat("BOMB %d  SHARD %d  KEY %d  GUN P%d S%d",P.bombs,P.shards,P.keys,P.gunPow,P.gunSpd),470,12,18,(Color){180,200,210,255});
     DrawText(TextFormat("%s / %s",g_areaName,g_roomName),SCREEN_W-380,12,18,(Color){150,160,180,255});
     DrawText(TextFormat("STATE %s",PStateName()),14,SCREEN_H-26,18,(Color){150,170,190,255});
-    DrawText("A/D move  SPACE jump  J fire  K back  V knife  E bomb  W use  F fx  ` debug",300,SCREEN_H-26,16,(Color){90,100,115,255});
+    DrawText("A/D move  SPACE jump  J fire  K back  V knife  E place/T throw bomb  W use  ` debug",286,SCREEN_H-26,15,(Color){90,100,115,255});
     { int fps=GetFPS(); const char*ft=TextFormat("%d FPS",fps); int fw=MeasureText(ft,18);
       Color fc = fps>=60?(Color){120,210,120,255} : fps>=30?(Color){220,210,120,255} : (Color){220,110,110,255};
       DrawText(ft,SCREEN_W-fw-12,SCREEN_H-26,18,fc); }
@@ -1328,7 +1342,7 @@ int main(int argc,char**argv){
             acc+=ft; int steps=0;
             while(acc>=DT && steps<5){
                 SimStep(in);
-                in.up=in.down=in.fireF=in.fireB=in.use=in.cycle=in.jump=in.melee=0;   // consume edges after first sub-step
+                in.up=in.down=in.fireF=in.fireB=in.use=in.cycle=in.jump=in.melee=in.throwb=0;   // consume edges after first sub-step
                 acc-=DT; steps++; g_frame++;
                 if((g_rate>0 && g_frame%g_rate==0) || g_rate<=0) EmitState();
                 if(g_maxFrames && g_frame>=g_maxFrames) running=0;
