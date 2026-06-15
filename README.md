@@ -15,6 +15,9 @@ types (shooter / advancing brute / cover-using sentry), and procedural audio.
 Built on the M1 room graph (doors, keys/locked doors, lever→bridge, checkpoints).
 Actors and tiles now render as **original, code-generated pixel-art sprites**
 (no external assets); `./build/thorn --dumpsprites` exports the sheet to a PNG.
+A **visual FX layer** adds dynamic lighting + vignette, parallax backgrounds,
+particles (sparks/blood/smoke/embers) and screen-shake — toggle with `F` or
+`--nofx`. All original techniques (no copyrighted assets).
 
 ## Run
 
@@ -65,7 +68,7 @@ Useful flags: `--continue` (resume from the last saved area) / `--password CODE`
 CI/SSH), `--selftest` (validate the whole room graph), `--room PATH` / `--spawn ID`
 (boot into a specific room/entrance), `--rate N` (snapshot cadence; `0` = every
 frame), `--frames N` (run N then quit), `--shot N` (screenshot at frame N),
-`--god`, `--no-enemies`, `--demo`, `--dumpsprites`.
+`--god`, `--no-enemies`, `--demo`, `--dumpsprites`, `--nofx` (disable visual FX).
 
 ## Layout
 

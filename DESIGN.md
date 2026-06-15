@@ -447,10 +447,12 @@ incremental and instant when nothing changed.
   0 errors) and a headless run that reaches all four areas + opens the gate; the
   boss-death→victory path verified directly. *Known limitation:* picked-up shards
   re-spawn if you re-enter a room (no global "collected" set yet) — a polish item.
-- **M4 — Polish (started).** Original pixel-art sprites for actors/tiles are in
-  (generated in code; primitives remain as fallback); still to do: richer/larger
-  sprite sets and animation, music, menus, options, and Linux/Web/iOS build
-  parity with the sibling projects.
+- **M4 — Polish (in progress).** Original pixel-art sprites + a visual FX layer
+  are in: dynamic 2D lighting (additive glow + vignette + per-area colour grade),
+  parallax backgrounds, a particle system (sparks/blood/smoke/embers/casings) and
+  screen-shake juice (all original, no GLSL; `F` / `--nofx` toggles). Still to do:
+  richer/larger sprites + more animation, optional shader bloom/CRT, persistent
+  shard collection, music, menus, and Linux/Web/iOS build parity.
 
 ## 9. Risks & open questions
 - **Climb feel** is the hardest thing to make non-fiddly without a jump button;

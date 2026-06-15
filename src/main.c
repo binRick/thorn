@@ -138,6 +138,27 @@ typedef struct { float bx,by,w,h; int axis; float amp,omega,phase; float x,y,dx,
 #define MAXLIFT 4
 static Lift   g_lifts[MAXLIFT]; static int g_liftN=0;
 
+// ---- FX: particles, screen-shake, lighting (cosmetic; windowed-only) --------
+typedef struct { float x,y,vx,vy,life,max,size; unsigned char r,g,b; int add,grav; } Part;
+#define MAXPART 512
+static Part g_part[MAXPART]; static int g_partHead=0;
+static int   g_fx=1; static float g_shake=0;
+static Texture2D g_tLight, g_tVign;   // soft radial light + vignette (built in InitSprites)
+static void Emit(float x,float y,int n,float spd,float life,float size,Color c,int add,int grav){
+    if(!g_fx||g_headless) return;
+    for(int k=0;k<n;k++){ Part*p=&g_part[g_partHead]; g_partHead=(g_partHead+1)%MAXPART;
+        float a=(rand()%628)/100.0f, s=spd*(0.35f+(rand()%100)/100.0f);
+        p->x=x; p->y=y; p->vx=cosf(a)*s; p->vy=sinf(a)*s-(grav?spd*0.35f:0);
+        p->life=p->max=life*(0.6f+(rand()%80)/100.0f); p->size=size;
+        p->r=c.r; p->g=c.g; p->b=c.b; p->add=add; p->grav=grav; }
+}
+static void UpdateParticles(void){
+    if(g_headless) return;
+    if(g_shake>0){ g_shake-=DT*38.0f; if(g_shake<0) g_shake=0; }
+    for(int i=0;i<MAXPART;i++){ Part*p=&g_part[i]; if(p->life<=0) continue;
+        p->life-=DT; if(p->grav) p->vy+=900.0f*DT; p->x+=p->vx*DT; p->y+=p->vy*DT; p->vx*=0.985f; }
+}
+
 // ---- World grid -------------------------------------------------------------
 // Rooms load from levels/<area>/<room>.lvl (format in DESIGN.md). A built-in
 // fallback boots if a file is missing.
@@ -428,9 +449,10 @@ static void Fire(int dir){
     }
     float endx = mx + dir*(hitIdx>=0?best:P_RANGE);
     SpawnShot(mx,my,endx,my,0);
+    Emit(mx,my,7,360,0.16f,2.2f,(Color){255,220,130,255},1,0); Emit(P.x+PW*0.5f,gunY(),1,110,0.6f,1.6f,(Color){210,180,90,255},0,1);   // muzzle sparks + shell casing
     if(hitIdx>=0){ Enemy*e=&g_en[hitIdx]; e->hp-=dmg; e->hitFlash=0.12f;
-        if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); Ev("enemy %d killed",hitIdx); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"x\":%.1f,\"y\":%.1f",hitIdx,e->x,e->y); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
-        else { SndPlay(SND_HIT); DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":%d,\"hp\":%d",hitIdx,dmg,e->hp); }
+        if(e->hp<=0){ e->alive=0; e->st="DEAD"; SndPlay(SND_DEATH); Emit(e->x+EW*0.5f,e->y+EH*0.5f,16,300,0.6f,2.6f,(Color){170,30,30,255},0,1); g_shake=fmaxf(g_shake,7.0f); Ev("enemy %d killed",hitIdx); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"x\":%.1f,\"y\":%.1f",hitIdx,e->x,e->y); if(e->type==3){ g_victory=1; g_won=1; g_shake=20.0f; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
+        else { SndPlay(SND_HIT); Emit(e->x+EW*0.5f,e->y+EH*0.5f,7,240,0.35f,2.0f,(Color){200,40,40,255},0,1); DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":%d,\"hp\":%d",hitIdx,dmg,e->hp); }
     }
     DebugLog("fire","\"dir\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"face\":%d,\"dmg\":%d,\"mag\":%d,\"hit\":%s,\"target\":%d",
              dir==P.face?"fwd":"back", mx,my,P.face,dmg,P.mag, hitIdx>=0?"true":"false", hitIdx);
@@ -441,6 +463,7 @@ static void Fire(int dir){
 static void HurtPlayer(int dmg,const char*cause){
     if(g_god||P.iframes>0||P.dead) return;
     P.hp-=dmg; P.iframes=IFRAMES;
+    Emit(pcx(),pcy(),8,240,0.4f,2.2f,(Color){200,60,60,255},0,1); g_shake=fmaxf(g_shake,5.0f);
     DebugLog("hit","\"who\":\"player\",\"dmg\":%d,\"hp\":%d,\"cause\":\"%s\"",dmg,P.hp,cause);
     Ev("player hit -%d (%s)",dmg,cause);
     if(P.hp<=0){ P.hp=0; P.dead=1; P.deadT=0; DebugLog("death","\"who\":\"player\",\"x\":%.1f,\"y\":%.1f,\"cause\":\"%s\"",P.x,P.y,cause); Ev("player DIED (%s)",cause); }
@@ -460,6 +483,7 @@ static void ExplodeBomb(float bx,float by){
             if(e->hp<=0){ e->alive=0; e->st="DEAD"; DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"bomb\"",i); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } } } }
     float pdx=pcx()-bx, pdy=pcy()-by; if(pdx*pdx+pdy*pdy<BOMB_RADIUS*BOMB_RADIUS) HurtPlayer(30,"bomb");
     g_boomT=0.35f; g_boomX=bx; g_boomY=by; SndPlay(SND_BOMB);
+    Emit(bx,by,18,90,0.9f,5.0f,(Color){92,86,80,255},0,0); Emit(bx,by,22,420,0.5f,3.0f,(Color){255,180,80,255},1,0); Emit(bx,by,14,300,0.8f,2.4f,(Color){120,110,100,255},0,1); g_shake=16.0f;
     DebugLog("bomb","\"explode\":[%.0f,%.0f],\"destroyed\":%d,\"enemiesHit\":%d",bx,by,destroyed,hits); Ev("BOOM (-%d walls)",destroyed);
 }
 static void PlaceBomb(void){
@@ -672,7 +696,8 @@ static void SimStep(Input in){
         UpdateCam();
         return;
     }
-    UpdateEnemies(); UpdateShots(); UpdateBombs(); UpdateCam();
+    UpdateEnemies(); UpdateShots(); UpdateBombs(); UpdateParticles(); UpdateCam();
+    if(g_fx && !g_headless && !P.dead && (g_frame%9==0)) Emit(pcx()+(rand()%440-220),pcy()+(rand()%280-170),1,9.0f,2.8f,1.3f,(Color){255,170,90,255},1,0);  // drifting embers
 }
 
 // ---- Recurring state snapshot ----------------------------------------------
@@ -773,6 +798,12 @@ static void InitSprites(void){
     im=ImgStone((Color){58,54,64,255},0); g_tStone=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgStone((Color){78,64,52,255},1); g_tCrack=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgBridge(); g_tBridge=LoadTextureFromImage(im); UnloadImage(im);
+    { int n=128; Image im2=GenImageColor(n,n,(Color){0,0,0,0});   // soft radial light
+      for(int y=0;y<n;y++) for(int x=0;x<n;x++){ float dx=(x-n/2)/(float)(n/2),dy=(y-n/2)/(float)(n/2),d=sqrtf(dx*dx+dy*dy),v=1.0f-d; if(v<0)v=0; v=v*v; ImageDrawPixel(&im2,x,y,(Color){255,255,255,(unsigned char)(v*255)}); }
+      g_tLight=LoadTextureFromImage(im2); SetTextureFilter(g_tLight,TEXTURE_FILTER_BILINEAR); UnloadImage(im2); }
+    { int W=SCREEN_W/6,H=SCREEN_H/6; Image im2=GenImageColor(W,H,(Color){0,0,0,0});   // vignette
+      for(int y=0;y<H;y++) for(int x=0;x<W;x++){ float dx=(x-W/2)/(float)(W/2),dy=(y-H/2)/(float)(H/2),d=sqrtf(dx*dx+dy*dy),v=(d-0.62f)/0.5f; if(v<0)v=0; if(v>1)v=1; ImageDrawPixel(&im2,x,y,(Color){0,0,0,(unsigned char)(v*175)}); }
+      g_tVign=LoadTextureFromImage(im2); SetTextureFilter(g_tVign,TEXTURE_FILTER_BILINEAR); UnloadImage(im2); }
     g_sprites=1;
 }
 // Export the sprites to a PNG (no window needed) for visual review.
@@ -817,8 +848,43 @@ static void DrawFigure(float x,float y,float w,float h,int face,Color body,int f
     if(firing) DrawCircle((int)(dir>0?x+w+8:x-8),(int)(y+h*0.42f+2),8,(Color){255,230,120,235});
 }
 
+static Color AreaTint(void){
+    if(strstr(g_areaName,"Mire"))     return (Color){34,64,44,255};   // murky green
+    if(strstr(g_areaName,"Ashlands")) return (Color){86,52,30,255};   // warm ash
+    if(strstr(g_areaName,"Keep"))     return (Color){34,30,52,255};   // cold violet-dark
+    return (Color){30,34,50,255};                                      // mines blue-grey
+}
+static void DrawParallax(void){
+    Color t=AreaTint();
+    DrawRectangleGradientV(0,0,SCREEN_W,SCREEN_H,(Color){t.r/3,t.g/3,t.b/3,255},(Color){t.r/7,t.g/7,t.b/7,255});
+    int o1=(int)g_cam.x/5; for(int x=-200;x<SCREEN_W+200;x+=180){ int gx=x-(o1%180); int h=130+((x/180)*53)%90; DrawRectangle(gx,SCREEN_H-260-h,150,500,(Color){t.r/2,t.g/2,t.b/2,90}); }
+    int o2=(int)(g_cam.x*0.45f); for(int x=-140;x<SCREEN_W+140;x+=130){ int gx=x-(o2%130); int h=90+((x/130)*37)%80; DrawRectangle(gx,SCREEN_H-170-h,110,420,(Color){t.r/2,t.g/2,t.b/2,130}); }
+}
+static void DrawParticles(void){
+    for(int i=0;i<MAXPART;i++){ Part*p=&g_part[i]; if(p->life<=0||p->add) continue; float a=p->life/p->max; float s=p->size*(0.5f+a*0.7f);
+        DrawRectangle((int)(p->x-s),(int)(p->y-s),(int)(s*2+1),(int)(s*2+1),(Color){p->r,p->g,p->b,(unsigned char)(a*255)}); }
+    BeginBlendMode(BLEND_ADDITIVE);
+    for(int i=0;i<MAXPART;i++){ Part*p=&g_part[i]; if(p->life<=0||!p->add) continue; float a=p->life/p->max; float s=p->size*(0.5f+a*0.9f);
+        DrawRectangle((int)(p->x-s),(int)(p->y-s),(int)(s*2+1),(int)(s*2+1),(Color){p->r,p->g,p->b,(unsigned char)(a*255)}); }
+    EndBlendMode();
+}
+static void Light(float wx,float wy,float rad,Color c){ DrawTexturePro(g_tLight,(Rectangle){0,0,128,128},(Rectangle){wx-g_cam.x-rad,wy-g_cam.y-rad,rad*2,rad*2},(Vector2){0,0},0,c); }
+static void DrawLighting(void){
+    Color t=AreaTint();
+    DrawRectangle(0,0,SCREEN_W,SCREEN_H,(Color){t.r,t.g,t.b,46});   // subtle area colour grade
+    BeginBlendMode(BLEND_ADDITIVE);
+    if(!P.dead) Light(pcx(),pcy(),175,(Color){255,224,176,120});                              // player glow
+    if(P.muzzle>0) Light(P.muzzleDir>0?P.x+PW:P.x,gunY(),120,(Color){255,235,150,210});        // muzzle flash
+    for(int i=0;i<g_enN;i++) if(g_en[i].alive&&g_en[i].type==3) Light(g_en[i].x+EW*0.5f,g_en[i].y+EH*0.5f,150,(Color){235,90,110,110}); // boss aura
+    if(g_boomT>0){ float k=g_boomT/0.35f; Light(g_boomX,g_boomY,300,(Color){255,170,80,(unsigned char)(230*k)}); }
+    EndBlendMode();
+    DrawTexturePro(g_tVign,(Rectangle){0,0,(float)g_tVign.width,(float)g_tVign.height},(Rectangle){0,0,SCREEN_W,SCREEN_H},(Vector2){0,0},0,WHITE);
+}
+
 static void DrawWorld(void){
-    Camera2D cam={ .offset={SCREEN_W*0.5f,SCREEN_H*0.5f}, .target={g_cam.x+SCREEN_W*0.5f,g_cam.y+SCREEN_H*0.5f}, .rotation=0, .zoom=1 };
+    if(g_fx) DrawParallax();
+    float shx=0,shy=0; if(g_fx&&g_shake>0){ shx=((rand()%200)/100.0f-1.0f)*g_shake; shy=((rand()%200)/100.0f-1.0f)*g_shake; }
+    Camera2D cam={ .offset={SCREEN_W*0.5f+shx,SCREEN_H*0.5f+shy}, .target={g_cam.x+SCREEN_W*0.5f,g_cam.y+SCREEN_H*0.5f}, .rotation=0, .zoom=1 };
     BeginMode2D(cam);
     for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_alcove[r][c]){
         DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){14,16,26,255});
@@ -873,7 +939,9 @@ static void DrawWorld(void){
         else { Color pc = P.iframes>0?(Color){255,255,255,255}:(Color){90,150,235,255}; DrawFigure(P.x,P.y,PW,PH,P.face,pc,P.muzzle>0,P.muzzleDir,P.inCover); }
     } else DrawRectangle((int)P.x,(int)(P.y+PH-8),(int)PW,8,(Color){120,40,40,220});
     if(g_hitboxes){ DrawRectangleLinesEx((Rectangle){P.x,P.y,PW,PH},1,GREEN); for(int i=0;i<g_enN;i++) if(g_en[i].alive) DrawRectangleLinesEx((Rectangle){g_en[i].x,g_en[i].y,EW,EH},1,RED); }
+    if(g_fx) DrawParticles();   // world-space, on top of actors
     EndMode2D();
+    if(g_fx) DrawLighting();    // screen-space atmosphere
 }
 
 static void Bar(int x,int y,int w,int h,float frac,Color fg){ DrawRectangle(x,y,w,h,(Color){30,30,36,220}); DrawRectangle(x,y,(int)(w*clampf(frac,0,1)),h,fg); DrawRectangleLines(x,y,w,h,(Color){10,10,12,255}); }
@@ -887,7 +955,7 @@ static void DrawHUD(void){
     DrawText(TextFormat("BOMB %d  SHARD %d  KEY %d  GUN P%d S%d",P.bombs,P.shards,P.keys,P.gunPow,P.gunSpd),470,12,18,(Color){180,200,210,255});
     DrawText(TextFormat("%s / %s",g_areaName,g_roomName),SCREEN_W-380,12,18,(Color){150,160,180,255});
     DrawText(TextFormat("STATE %s",PStateName()),14,SCREEN_H-26,18,(Color){150,170,190,255});
-    DrawText("A/D move  SPACE jump  W climb/use  J fire  K back  E bomb  ` debug",360,SCREEN_H-26,16,(Color){90,100,115,255});
+    DrawText("A/D move  SPACE jump  W climb/use  J fire  K back  E bomb  F fx  ` debug",330,SCREEN_H-26,16,(Color){90,100,115,255});
     { int fps=GetFPS(); const char*ft=TextFormat("%d FPS",fps); int fw=MeasureText(ft,18);
       Color fc = fps>=60?(Color){120,210,120,255} : fps>=30?(Color){220,210,120,255} : (Color){220,110,110,255};
       DrawText(ft,SCREEN_W-fw-12,SCREEN_H-26,18,fc); }
@@ -984,6 +1052,7 @@ int main(int argc,char**argv){
         else if(!strcmp(argv[i],"--frames")&&i+1<argc) g_maxFrames=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--shot")&&i+1<argc) g_shotFrame=atoi(argv[++i]);
         else if(!strcmp(argv[i],"--dumpsprites")) dump=1;
+        else if(!strcmp(argv[i],"--nofx")) g_fx=0;
         else if(!strcmp(argv[i],"--continue")) docontinue=1;
         else if(!strcmp(argv[i],"--password")&&i+1<argc) snprintf(pwarg,sizeof pwarg,"%s",argv[++i]);
     }
@@ -1010,7 +1079,7 @@ int main(int argc,char**argv){
         InitSprites();    // uploads generated textures; needs the GL context above
     }
 
-    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.6.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
+    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.7.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
     DebugLog("window","\"w\":%d,\"h\":%d,\"monitor\":%d",SCREEN_W,SCREEN_H,g_headless?0:GetCurrentMonitor());
 
     // New game: stats, then the first room (LoadRoom logs its own "level" event).
@@ -1038,6 +1107,7 @@ int main(int argc,char**argv){
         if(IsKeyPressed(KEY_P)){ g_paused=!g_paused; DebugLog("pause","\"paused\":%s",g_paused?"true":"false"); }
         if(IsKeyPressed(KEY_G)){ g_god=!g_god; DebugLog("mode","\"god\":%s",g_god?"true":"false"); }
         if(IsKeyPressed(KEY_H)) g_hitboxes=!g_hitboxes;
+        if(IsKeyPressed(KEY_F)){ g_fx=!g_fx; DebugLog("mode","\"fx\":%s",g_fx?"true":"false"); }
         if(IsKeyPressed(KEY_N)){ g_noEnemies=!g_noEnemies; DebugLog("mode","\"noEnemies\":%s",g_noEnemies?"true":"false"); }
         if(IsKeyPressed(KEY_R)){ RespawnAtCheckpoint(); g_won=0; g_areaClear=0; }
 
