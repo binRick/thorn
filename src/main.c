@@ -791,6 +791,22 @@ static void UpdateCam(void){
 
 // One simulation step. Applies a deferred door transition (a door can't reload
 // the room mid-update while we're iterating its entities).
+// Per-area ambient particles for atmosphere — themed to the current area, spawned
+// across the visible camera view. Purely cosmetic (skipped headless / when FX off).
+static void AmbientFX(void){
+    if(!g_fx||g_headless||P.dead) return;
+    float vx=g_cam.x, vy=g_cam.y;
+    if(strstr(g_areaName,"Ashland")){            // forge-fires: embers rising from below
+        if(g_frame%6==0)  Emit(vx+rand()%SCREEN_W, vy+SCREEN_H-20-rand()%60, 1,10.0f,3.0f,1.4f,(Color){255,150,70,255},1,0);
+    } else if(strstr(g_areaName,"Mire")){        // swamp: slow drifting green motes
+        if(g_frame%9==0)  Emit(vx+rand()%SCREEN_W, vy+rand()%SCREEN_H,        1, 5.0f,4.5f,2.0f,(Color){120,180,110,255},0,0);
+    } else if(strstr(g_areaName,"Keep")){        // cold keep: pale violet dust falling
+        if(g_frame%12==0) Emit(vx+rand()%SCREEN_W, vy+10+rand()%40,           1, 6.0f,3.5f,1.3f,(Color){150,140,180,255},0,1);
+    } else {                                      // Sunken Mines: ceiling drips + dust
+        if(g_frame%14==0) Emit(vx+rand()%SCREEN_W, vy+8+rand()%30,            1, 7.0f,2.6f,1.4f,(Color){140,170,210,255},0,1);
+        if(g_frame%22==0) Emit(vx+rand()%SCREEN_W, vy+rand()%SCREEN_H,        1, 3.0f,3.0f,1.1f,(Color){120,120,130,255},0,0);
+    }
+}
 static void SimStep(Input in){
     UpdateLifts();
     if(g_msgT>0) g_msgT-=DT;
@@ -804,7 +820,7 @@ static void SimStep(Input in){
         return;
     }
     UpdateEnemies(); UpdateShots(); UpdateBombs(); UpdateParticles(); UpdateCam();
-    if(g_fx && !g_headless && !P.dead && (g_frame%9==0)) Emit(pcx()+(rand()%440-220),pcy()+(rand()%280-170),1,9.0f,2.8f,1.3f,(Color){255,170,90,255},1,0);  // drifting embers
+    AmbientFX();   // area-themed ambient particles (embers / motes / drips / dust)
 }
 
 // ---- Recurring state snapshot ----------------------------------------------
