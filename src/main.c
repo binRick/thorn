@@ -125,6 +125,7 @@ static struct {
     int   onLift;          // index of the lift the player is riding, or -1
     float hurtT;           // flinch-animation timer
     float meleeCD,meleeT;  // knife cooldown + swing timer
+    float coyote,jumpBuf;  // forgiving-jump windows
     int   dead; float deadT;
 } P;
 
@@ -585,6 +586,8 @@ static void UpdatePlayer(Input in){
     if(P.dead){ P.deadT+=DT; if(P.deadT>1.4f) RespawnAtCheckpoint(); return; }
     P.iframes=fmaxf(0,P.iframes-DT); P.fireCD=fmaxf(0,P.fireCD-DT); P.muzzle=fmaxf(0,P.muzzle-DT); P.hurtT=fmaxf(0,P.hurtT-DT);
     P.meleeCD=fmaxf(0,P.meleeCD-DT); P.meleeT=fmaxf(0,P.meleeT-DT);
+    if(P.onGround) P.coyote=0.10f; else P.coyote=fmaxf(0,P.coyote-DT);   // grace after leaving a ledge
+    if(in.jump) P.jumpBuf=0.12f; else P.jumpBuf=fmaxf(0,P.jumpBuf-DT);   // buffer a press just before landing
     if(P.reloadT>0){ P.reloadT-=DT; if(P.reloadT<=0){ int load=MAG_MAX-P.mag; if(load>P.reserve)load=P.reserve; P.mag+=load; P.reserve-=load; DebugLog("reload","\"done\":true,\"mag\":%d,\"reserve\":%d",P.mag,P.reserve); Ev("reloaded (%d)",P.mag); } }
 
     if(P.climbT>0){ P.climbT-=DT; return; }
@@ -652,7 +655,7 @@ static void UpdatePlayer(Input in){
     if(in.fireB) Fire(-P.face);
     if(in.use)   PlaceBomb();   // E: drop a bomb (blows cracked walls / clusters)
     if(in.melee) Melee();       // V: knife
-    if(in.jump && (P.onGround||P.onLift>=0)){ P.vy=-JUMP_V; P.onGround=0; P.onLift=-1; SndPlay(SND_JUMP); DebugLog("jump","\"x\":%.1f,\"y\":%.1f",P.x,P.y); Ev("jump"); }
+    if(P.jumpBuf>0 && (P.coyote>0||P.onLift>=0) && P.climbT<=0){ P.vy=-JUMP_V; P.onGround=0; P.onLift=-1; P.jumpBuf=0; P.coyote=0; SndPlay(SND_JUMP); DebugLog("jump","\"x\":%.1f,\"y\":%.1f",P.x,P.y); Ev("jump"); }
 
     P.vy=fminf(P.vy+GRAV*DT,MAXFALL);
     PlayerMoveX(); PlayerMoveY(); ResolveLifts();
