@@ -23,7 +23,7 @@ ifeq ($(UNAME_S),Linux)
   LIBS += -lm -lpthread -ldl -lrt -lX11
 endif
 
-.PHONY: all run debug clean raylib6
+.PHONY: all run debug test clean raylib6
 all: $(BIN)
 
 # Incremental: only relink when a source, header, or the raylib archive changes.
@@ -38,6 +38,10 @@ run: $(BIN)
 
 debug: $(BIN)
 	./$(BIN) --debug
+
+# Headless regression check: room graph + a full four-area playthrough.
+test: $(BIN)
+	@bash tests/playthrough.sh
 
 clean:
 	rm -rf $(BUILD)
