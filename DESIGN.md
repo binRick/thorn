@@ -5,7 +5,10 @@
 > `../Chernobyl`, `../Chernobyl2`, and `../uapd`, and emits a recurring **JSON
 > instrumentation log** so game state can be reconstructed after any bug.
 
-Status: **v0.6 — M3 complete** — all four areas (Sunken Mines → the Mire → the
+Status: **v0.9** — playable end-to-end with a title menu, animated hero
+(idle/walk/fire/hurt/climb), a knife, dynamic lighting + particles + screen-shake,
+procedural + sampled audio, a drop-in CC0 sprite pipeline, persistent pickups, and
+a `make test` regression harness — on the M3 base: all four areas (Sunken Mines → the Mire → the
 Ashlands → the Usurper's Keep) linked end-to-end, a Daystone-shard gate, NPC
 gifts/hints, area passwords (save / `--continue`), and the **Maldrak boss**. On
 top of sprites, a sampled shotgun SFX, a **jump** (a divergence from Blackthorne;
@@ -175,6 +178,7 @@ is an optional objective.
 | **Fire forward** | `J` or `Ctrl` |
 | **Fire backward (over shoulder)** | `K` |
 | Place bomb | `E` |
+| Knife (melee) | `V` |
 | Reload | automatic when the magazine empties (if shells remain) |
 | Pause | `P` |
 | Debug overlay | `` ` `` or `Tab` |

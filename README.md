@@ -5,7 +5,10 @@ on **raylib 6.0**. Weighty traversal (with a jump); a pump-shotgun that fires fo
 **and over the shoulder**; ducking into background **shadow alcoves** to let
 bullets pass. Original art, naming, and levels — see **[DESIGN.md](DESIGN.md)**.
 
-Status: **v0.6 — M3 complete** — all four areas (Sunken Mines → the Mire → the
+Status: **v0.9** — playable end-to-end with a title menu, animated hero
+(idle/walk/fire/hurt/climb), a knife, dynamic lighting + particles + screen-shake,
+audio, a drop-in CC0 sprite pipeline, persistent pickups, and a `make test`
+regression harness — on the M3 base: all four areas (Sunken Mines → the Mire → the
 Ashlands → the Usurper's Keep) linked end-to-end, a Daystone-shard gate, NPC
 gifts/hints, area passwords, and the **Maldrak boss**. On top of sprite art, a
 sampled shotgun SFX, a **jump** (`Space`), and combat & items depth over the
@@ -75,7 +78,7 @@ CI/SSH), `--selftest` (validate the whole room graph), `--room PATH` / `--spawn 
 (boot into a specific room/entrance), `--rate N` (snapshot cadence; `0` = every
 frame), `--frames N` (run N then quit), `--shot N` (screenshot at frame N),
 `--god`, `--no-enemies`, `--demo`, `--dumpsprites`, `--gen-assets` (regenerate the
-CC0 sprite PNGs), `--nofx` (disable visual FX).
+CC0 sprite PNGs), `--nofx` (disable visual FX), `--skiptitle` (skip the menu).
 
 ## Layout
 

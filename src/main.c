@@ -1263,7 +1263,7 @@ int main(int argc,char**argv){
         InitSprites();    // uploads generated textures; needs the GL context above
     }
 
-    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.8.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
+    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.9.0\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
     DebugLog("window","\"w\":%d,\"h\":%d,\"monitor\":%d",SCREEN_W,SCREEN_H,g_headless?0:GetCurrentMonitor());
 
     // New game: stats, then the first room (LoadRoom logs its own "level" event).
