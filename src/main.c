@@ -220,6 +220,7 @@ static int g_noEnemies=0, g_god=0, g_demo=0, g_paused=0, g_overlay=0, g_hitboxes
 static int g_rate=24, g_maxFrames=0, g_shotFrame=0, g_startSpawn=-1;
 static long g_frame=0; static int g_won=0;
 enum { SCENE_TITLE, SCENE_PLAY }; static int g_scene=SCENE_TITLE, g_menuSel=0, g_skiptitle=0;
+static int g_pauseSel=0; static const char*g_pauseItems[3]={"Resume","Restart checkpoint","Quit to title"};
 static int g_diff=1; static const char*g_diffName[3]={"Easy","Normal","Hard"}; static const float g_diffMul[3]={0.6f,1.0f,1.5f};
 static char g_roomStart[160]="levels/sunken_mines/entrance.lvl";
 static const struct { const char*code; const char*path; } g_pwTable[] = {   // --password
@@ -1221,8 +1222,13 @@ static void DrawHUD(void){
     if(g_msgT>0){ int w=MeasureText(g_msg,22); DrawRectangle(0,50,SCREEN_W,30,(Color){0,0,0,150}); DrawText(g_msg,SCREEN_W/2-w/2,55,22,(Color){235,225,160,255}); }
     if(g_won){ const char*m=g_victory?"THE USURPER FALLS":g_areaClear?"AREA CLEAR":"LEVEL CLEAR"; Color col=g_victory?(Color){235,210,90,255}:(Color){120,230,140,255}; int w=MeasureText(m,52); DrawRectangle(0,SCREEN_H/2-50,SCREEN_W,100,(Color){0,0,0,170}); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,col); }
     if(P.dead){ const char*m="YOU DIED"; int w=MeasureText(m,52); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-26,52,(Color){220,80,80,255}); }
-    if(g_paused){ const char*m="PAUSED"; int w=MeasureText(m,40); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-20,40,RAYWHITE);
-        const char*h="P resume    BACKSPACE title"; int hw=MeasureText(h,18); DrawText(h,SCREEN_W/2-hw/2,SCREEN_H/2+28,18,(Color){170,180,195,255}); }
+    if(g_paused){
+        DrawRectangle(0,0,SCREEN_W,SCREEN_H,(Color){0,0,0,150});
+        const char*m="PAUSED"; int w=MeasureText(m,44); DrawText(m,SCREEN_W/2-w/2,SCREEN_H/2-120,44,RAYWHITE);
+        for(int i=0;i<3;i++){ int sel=(i==g_pauseSel); int fs=28; int iw=MeasureText(g_pauseItems[i],fs); int yy=SCREEN_H/2-30+i*46;
+            if(sel){ DrawRectangle(SCREEN_W/2-iw/2-18,yy-6,iw+36,fs+12,(Color){210,185,120,40}); DrawText(">",SCREEN_W/2-iw/2-34,yy,fs,(Color){210,185,120,255}); }
+            DrawText(g_pauseItems[i],SCREEN_W/2-iw/2,yy,fs,sel?(Color){235,225,200,255}:(Color){150,160,175,255}); }
+        const char*h="Up/Down select    Enter confirm    P resume"; int hw=MeasureText(h,18); DrawText(h,SCREEN_W/2-hw/2,SCREEN_H/2+130,18,(Color){130,140,155,255}); }
 }
 
 static void DrawOverlay(void){
@@ -1405,8 +1411,20 @@ int main(int argc,char**argv){
             continue;
         }
         if(IsKeyPressed(KEY_GRAVE)||IsKeyPressed(KEY_TAB)) g_overlay=!g_overlay;
-        if(g_paused && IsKeyPressed(KEY_BACKSPACE)){ g_scene=SCENE_TITLE; g_paused=0; g_menuSel=0; continue; }   // pause -> title
-        if(IsKeyPressed(KEY_P)){ g_paused=!g_paused; DebugLog("pause","\"paused\":%s",g_paused?"true":"false"); }
+        if(IsKeyPressed(KEY_P)){ g_paused=!g_paused; g_pauseSel=0; DebugLog("pause","\"paused\":%s",g_paused?"true":"false"); }
+        if(g_paused){   // self-contained pause menu (Resume / Restart checkpoint / Quit to title)
+            if(IsKeyPressed(KEY_UP)||IsKeyPressed(KEY_W))   g_pauseSel=(g_pauseSel+2)%3;
+            if(IsKeyPressed(KEY_DOWN)||IsKeyPressed(KEY_S)) g_pauseSel=(g_pauseSel+1)%3;
+            int go=IsKeyPressed(KEY_ENTER)||IsKeyPressed(KEY_SPACE);
+            if(IsKeyPressed(KEY_BACKSPACE)){ g_pauseSel=2; go=1; }   // legacy shortcut: backspace -> title
+            if(go){
+                if(g_pauseSel==1){ RespawnAtCheckpoint(); g_won=0; g_areaClear=0; g_paused=0; DebugLog("pause","\"action\":\"restart\""); }
+                else if(g_pauseSel==2){ g_scene=SCENE_TITLE; g_paused=0; g_menuSel=0; DebugLog("pause","\"action\":\"title\""); continue; }
+                else { g_paused=0; DebugLog("pause","\"paused\":false"); }
+            }
+            BeginDrawing(); ClearBackground((Color){20,22,30,255}); DrawWorld(); DrawHUD(); DrawOverlay(); EndDrawing();
+            continue;
+        }
         if(IsKeyPressed(KEY_G)){ g_god=!g_god; DebugLog("mode","\"god\":%s",g_god?"true":"false"); }
         if(IsKeyPressed(KEY_H)) g_hitboxes=!g_hitboxes;
         if(IsKeyPressed(KEY_F)){ g_fx=!g_fx; SaveOptions(); DebugLog("mode","\"fx\":%s",g_fx?"true":"false"); }
