@@ -873,23 +873,24 @@ static void EmitState(void){
 // material-id buffer, then shaded (rim light on the lit edge, dark contour on
 // the shadow edge, top-down form shading, emissive visor) for a modern metallic
 // look. No external or third-party sprite data.
-#define SPR_W 26
-#define SPR_H 42
-#define SPR_SCALE 1.35f   // draw actors bigger than the hitbox, feet-anchored (fills headroom)
+#define SPR_W 40
+#define SPR_H 56
+#define SPR_SCALE 1.5f    // draw actors bigger than the hitbox, feet-anchored (fills headroom)
+#define SPR_PI 3.14159265f
 static unsigned char g_idbuf[SPR_H][SPR_W];
 static Color shade(Color c,float f){
     int r=(int)(c.r*f),g=(int)(c.g*f),b=(int)(c.b*f);
     return (Color){ (unsigned char)(r>255?255:r<0?0:r),(unsigned char)(g>255?255:g<0?0:g),(unsigned char)(b>255?255:b<0?0:b),255 };
 }
-// material ids: 1 armor 2 dark 3 skin 4 visor(cyan) 5 gun 6 boot 7 lit-accent 8 enemy-eye(red) 9 muzzle-flash
+// material ids: 1 armor 2 dark 3 skin/hand 4 visor(cyan) 5 gun 6 boot 7 lit-accent 8 enemy-eye(red) 9 muzzle-flash
 static Color matCol(int id,Color cloth){
     switch(id){
         case 1: return cloth;
         case 2: return shade(cloth,0.55f);
-        case 3: return (Color){216,172,142,255};
+        case 3: return (Color){214,170,140,255};
         case 4: return (Color){140,236,240,255};
-        case 5: return (Color){142,150,166,255};
-        case 6: return (Color){48,42,38,255};
+        case 5: return (Color){150,158,172,255};
+        case 6: return (Color){52,46,42,255};
         case 7: return shade(cloth,1.22f);
         case 8: return (Color){255,104,82,255};
         case 9: return (Color){255,224,150,255};
@@ -902,18 +903,15 @@ static void fillRect(int x0,int y0,int x1,int y1,int id){
 }
 static void fillDisc(int cx,int cy,int rx,int ry,int id){
     for(int y=-ry;y<=ry;y++) for(int x=-rx;x<=rx;x++){
-        float u=rx?(float)x/rx:0,v=ry?(float)y/ry:0; if(u*u+v*v<=1.05f){ int px=cx+x,py=cy+y;
+        float u=rx?(float)x/rx:0,v=ry?(float)y/ry:0; if(u*u+v*v<=1.08f){ int px=cx+x,py=cy+y;
             if(px>=0&&px<SPR_W&&py>=0&&py<SPR_H) g_idbuf[py][px]=(unsigned char)id; } }
 }
-// one leg (thigh+shin+boot) swung horizontally for a run cycle, with a small lift.
-static void legPose(int hipx,int swing){
-    int kx=hipx+swing/2, fx=hipx+swing, lift=swing>1?1:0;
-    fillRect(hipx-1,27,hipx+1,33,1);
-    fillRect(kx-1,32,kx+1,38-lift,1);
-    fillRect(fx-1,38-lift,fx+3,40-lift,6);
+// thick capsule segment between two joints (limb)
+static void limb(int x0,int y0,int x1,int y1,int r,int id){
+    int dx=x1-x0,dy=y1-y0,n=(abs(dx)>abs(dy)?abs(dx):abs(dy))+1;
+    for(int i=0;i<=n;i++) fillDisc(x0+dx*i/n,y0+dy*i/n,r,r,id);
 }
-// Shade g_idbuf: dark contour on the shadow edge, rim light on the lit edge,
-// top-down form shading, and emissive visor / muzzle pixels.
+// Shade g_idbuf: dark contour, rim light on the lit edge, top-down form shade, emissive bits.
 static Image ShadeBuf(Color cloth){
     Image im=GenImageColor(SPR_W,SPR_H,(Color){0,0,0,0});
     const Color RIM={210,226,255,255};
@@ -926,88 +924,114 @@ static Image ShadeBuf(Color cloth){
         if(id==4||id==8||id==9){ Color hot=id==4?(Color){205,250,252,255}:id==8?(Color){255,182,150,255}:(Color){255,255,236,255}; ImageDrawPixel(&im,x,y,(lf==id&&rt==id)?hot:base); continue; }
         if(dn==0||rt==0){ ImageDrawPixel(&im,x,y,shade(base,0.45f)); continue; }
         if(up==0||lf==0){ ImageDrawPixel(&im,x,y,(Color){(unsigned char)((base.r+2*RIM.r)/3),(unsigned char)((base.g+2*RIM.g)/3),(unsigned char)((base.b+2*RIM.b)/3),255}); continue; }
-        float f=1.12f-0.40f*((float)y/SPR_H)+0.06f*(1.0f-(float)x/SPR_W);
+        float f=1.13f-0.40f*((float)y/SPR_H)+0.06f*(1.0f-(float)x/SPR_W);
         ImageDrawPixel(&im,x,y,shade(base,f));
     }
     return im;
 }
-static const int SWING[6]={3,1,-2,-3,-1,2};
-// Hero. legPhase 0 idle / 1..6 run cycle; fire 0 none / 1 recoil+flash / 2 settle; lean shifts head; reach=climb.
-static void BuildHero(int legPhase,int fire,int lean,int reach){
+// Hero rig (facing +x). frame 0 = idle, 1..6 = run cycle. mode 0 run/ready, 1 aim, 2 aim+flash.
+// lean shifts the upper body (hurt = negative), reach = climb pose.
+static void BuildHero(int frame,int mode,int lean,int reach){
     memset(g_idbuf,0,sizeof g_idbuf);
-    int hx=13+lean;
-    fillRect(6,14,8,22,2);                              // backpack
-    fillRect(6,12,7,13,7);                              // pack top accent
-    fillRect(6,8,6,11,7);                               // antenna rod
-    fillRect(8,12,17,26,1);                             // torso
-    fillRect(12,14,12,25,2);                            // center seam
-    fillRect(9,16,10,19,2); fillRect(15,16,16,19,7);    // chest panels (shadow / lit)
-    fillRect(8,12,10,13,7); fillRect(15,12,17,13,7);    // shoulder highlights
-    fillRect(9,20,16,20,2);                             // ab panel line
-    fillRect(8,25,17,27,2);                             // belt
-    fillDisc(hx,7,4,5,1);                               // helmet
-    fillRect(hx+4,1,hx+4,4,1); fillRect(hx+4,0,hx+4,0,7); // helmet antenna
+    int cx=19, groundY=54;
+    int run = frame>0;
+    float ph = run ? (float)(frame-1)/6.0f*2*SPR_PI : 0;
+    int bob = run ? -(int)(1.5f*fabsf(sinf(ph))) : 0;
+    int lf  = (run?2:0) + lean;
+    int shY=17+bob, hipY=35+bob;
+    int hx=cx+lf;
+    // legs (behind torso)
+    for(int sde=0;sde<2;sde++){
+        int hipx=cx+(sde?3:-3);
+        float a=ph+(sde?SPR_PI:0); float sw=run?sinf(a):0;
+        int footx=hipx+(int)(10*sw);
+        int footy=(int)(groundY-(run?8.0f*fmaxf(0,sinf(a+0.6f)):0));
+        int kneex=(hipx+footx)/2+(sw>0?2:1), kneey=(hipY+footy)/2+1;
+        limb(hipx,hipY,kneex,kneey,3,1);
+        limb(kneex,kneey,footx,footy,2,1);
+        fillRect(footx-2,footy-1,footx+4,footy+1,6);
+    }
+    // backpack
+    fillRect(cx-9,shY+1,cx-6,hipY-5,2); fillRect(cx-9,shY,cx-7,shY+1,7);
+    // torso
+    fillRect(cx-6,shY,cx+6,hipY,1);
+    fillRect(cx-1,shY+2,cx,hipY-3,2);                       // center seam
+    fillRect(cx-5,shY+3,cx-2,shY+8,2); fillRect(cx+2,shY+3,cx+5,shY+8,7);  // pecs
+    fillRect(cx-6,shY+11,cx+6,shY+11,2);                    // ab line
+    fillRect(cx-6,hipY-3,cx+6,hipY,2); fillRect(cx-2,hipY-2,cx+2,hipY-1,7);// belt+buckle
+    fillRect(cx-6,shY,cx-4,shY+2,7); fillRect(cx+4,shY,cx+6,shY+2,7);      // shoulder pads
+    // head
+    fillDisc(hx,shY-8,5,6,1);
+    fillRect(hx-1,shY-16,hx+1,shY-10,1); fillRect(hx+1,shY-15,hx+1,shY-10,7); // crest
+    fillRect(hx-2,shY-7,hx+4,shY-5,4);                      // visor band
+    fillRect(hx-4,shY-3,hx+3,shY-1,2);                      // jaw shadow
+    // arms + gun
+    int shRx=cx+5, shLx=cx-5;
     if(reach){
-        fillRect(7,7,9,14,1); fillRect(16,7,18,14,1);
-        fillRect(6,3,8,8,1);  fillRect(17,3,19,8,1);
-    } else if(fire){
-        fillRect(13,13,16,16,1);                        // support arm
-        fillRect(15,11,17,14,1); fillRect(16,8,20,11,5); fillRect(20,6,23,9,5);   // raised gun
-        if(fire==1){ fillDisc(24,7,2,3,9); fillRect(24,6,25,8,9); }               // muzzle flash
+        limb(cx-4,shY+1,cx-6,shY-9,2,1); limb(cx+4,shY+1,cx+6,shY-9,2,1);   // both arms up
+        fillDisc(cx-6,shY-10,2,2,1); fillDisc(cx+6,shY-10,2,2,1);
+    } else if(mode>=1){
+        int handx=cx+13, handy=shY+3;
+        limb(shRx,shY+1,cx+10,shY+2,3,1); limb(cx+10,shY+2,handx,handy,2,1); // gun arm fwd
+        limb(shLx,shY+2,cx+5,shY+5,2,1);                    // support arm
+        fillRect(handx-4,handy-2,handx+8,handy+1,5);        // rifle body+barrel
+        fillRect(handx-6,handy-1,handx-3,handy+1,2);        // stock
+        fillRect(handx-5,handy+1,handx-3,handy+4,5);        // grip
+        fillRect(handx+1,handy-3,handx+3,handy-2,2);        // sight
+        fillDisc(handx-1,handy,2,2,1);                      // front hand
+        if(mode==2){ fillDisc(handx+10,handy,3,3,9); fillRect(handx+10,handy-1,handx+13,handy+1,9); }
     } else {
-        fillRect(7,14,9,22,2);                          // rear arm
-        fillRect(15,15,18,18,1); fillRect(18,16,24,18,5); fillRect(23,15,24,19,5);  // gun forward
+        // near arm holds the rifle ready, swinging slightly with the stride
+        float a=ph; float sw=run?sinf(a):0;
+        int handx=cx+9+(int)(3*sw), handy=shY+8+(int)(2*sw);
+        int elbx=(shRx+handx)/2+1, elby=(shY+2+handy)/2;
+        limb(shRx,shY+1,elbx,elby,2,1); limb(elbx,elby,handx,handy,2,1);
+        fillRect(handx-2,handy-1,handx+8,handy,5); fillRect(handx+6,handy-2,handx+8,handy-1,5);
+        fillRect(handx-4,handy,handx-2,handy+2,5);          // grip
+        fillDisc(handx-1,handy,2,2,1);                      // gloved hand
     }
-    fillRect(hx-1,5,hx+3,6,4);                          // visor band
-    if(legPhase==0){ legPose(10,0); legPose(15,0); }
-    else { int sw=SWING[(legPhase-1)%6]; legPose(11,-sw); legPose(14,sw); }
 }
-static Image HeroFrame(Color cloth,int legPhase,int fire,int lean,int reach){ BuildHero(legPhase,fire,lean,reach); return ShadeBuf(cloth); }
-// Enemy builds, distinct silhouettes: 0 skarl (standard) 1 brute (hulking) 2 sentry (lean/tall) 3 maldrak (boss).
-static void BuildEnemy(int type,int legPhase){
+static Image HeroFrame(Color cloth,int frame,int mode,int lean,int reach){ BuildHero(frame,mode,lean,reach); return ShadeBuf(cloth); }
+// Enemy rig: distinct per-type silhouettes, 2-frame step, gun aimed forward.
+static void BuildEnemy(int type,int frame){
     memset(g_idbuf,0,sizeof g_idbuf);
-    int sw = legPhase? -2 : 2;
-    if(type==1){            // BRUTE: very wide, hulking, small sunken head
-        fillRect(3,13,9,25,2); fillRect(5,11,21,26,1); fillRect(13,13,14,25,2);
-        fillRect(6,15,9,21,2); fillRect(17,14,20,21,7);
-        fillRect(5,11,8,13,7); fillRect(18,11,21,13,7);
-        fillRect(6,26,20,28,2);
-        fillDisc(12,9,4,4,1); fillRect(9,8,15,9,8);
-        fillRect(4,15,6,24,1);
-        fillRect(18,16,21,21,1); fillRect(21,17,25,20,5);
-        legPose(8,sw); legPose(16,-sw);
-    } else if(type==2){     // SENTRY: lean, tall, long marksman rifle, scope eye
-        fillRect(8,12,9,24,2); fillRect(9,12,15,26,1); fillRect(12,14,12,25,2);
-        fillRect(13,15,14,21,7);
-        fillRect(9,12,10,13,7); fillRect(14,12,15,13,7);
-        fillRect(9,26,15,28,2);
-        fillDisc(12,7,3,5,1); fillRect(13,6,15,7,8);
-        fillRect(8,14,9,22,1);
-        fillRect(14,14,17,16,1); fillRect(17,14,25,16,5); fillRect(24,13,25,17,5);
-        legPose(10,sw); legPose(14,-sw);
-    } else if(type==3){     // MALDRAK: tall, broad, horned crown, pauldrons, heavy weapon
-        fillRect(4,12,8,27,2); fillRect(6,11,19,27,1); fillRect(12,13,13,26,2);
-        fillRect(8,15,10,22,2); fillRect(15,15,17,22,7);
-        fillRect(5,10,9,13,7); fillRect(16,10,20,13,7);
-        fillRect(4,9,4,12,1); fillRect(20,9,20,12,1);
-        fillRect(6,27,19,29,2);
-        fillDisc(12,7,4,5,1); fillRect(8,2,9,5,1); fillRect(16,2,17,5,1);
-        fillRect(9,6,16,7,8);
-        fillRect(5,15,7,24,1);
-        fillRect(16,14,19,18,1); fillRect(19,15,25,18,5); fillRect(24,13,25,20,5);
-        legPose(9,sw); legPose(16,-sw);
-    } else {                // SKARL: standard trooper
-        fillRect(6,13,8,23,2); fillRect(7,12,17,26,1); fillRect(12,14,12,25,2);
-        fillRect(8,16,10,20,2); fillRect(14,16,16,20,7);
-        fillRect(7,12,9,13,7); fillRect(15,12,17,13,7);
-        fillRect(7,26,17,28,2);
-        fillDisc(12,7,4,5,1); fillRect(10,5,15,6,8);
-        fillRect(6,14,8,22,1);
-        fillRect(15,15,18,18,1); fillRect(18,16,24,18,5); fillRect(23,15,24,19,5);
-        legPose(10,sw); legPose(15,-sw);
+    int cx=19, groundY=54, sw=frame?2:-2;
+    int tw,shY,hipY,hr;
+    if(type==1){ tw=10; shY=15; hipY=34; hr=4; }       // brute: wide
+    else if(type==2){ tw=5; shY=16; hipY=35; hr=3; }   // sentry: lean/tall
+    else if(type==3){ tw=8; shY=15; hipY=35; hr=5; }   // maldrak: big
+    else { tw=7; shY=16; hipY=34; hr=4; }              // skarl
+    // legs
+    for(int sde=0;sde<2;sde++){
+        int hipx=cx+(sde?tw/2:-tw/2); int dir=sde?sw:-sw;
+        int footx=hipx+dir, footy=groundY-(dir>0?3:0);
+        int kneex=(hipx+footx)/2+1, kneey=(hipY+footy)/2;
+        limb(hipx,hipY,kneex,kneey,3,1); limb(kneex,kneey,footx,footy,2,1);
+        fillRect(footx-2,footy-1,footx+4,footy+1,6);
     }
+    fillRect(cx-tw-3,shY+1,cx-tw,hipY-4,2);                 // back
+    fillRect(cx-tw,shY,cx+tw,hipY,1);                       // torso
+    fillRect(cx-1,shY+2,cx,hipY-3,2);
+    fillRect(cx-tw+1,shY+3,cx-2,shY+8,2); fillRect(cx+2,shY+3,cx+tw-1,shY+8,7);
+    fillRect(cx-tw,hipY-3,cx+tw,hipY,2);
+    fillRect(cx-tw,shY,cx-tw+2,shY+2,7); fillRect(cx+tw-2,shY,cx+tw,shY+2,7); // shoulders
+    // head
+    int hy=shY-hr-3;
+    fillDisc(cx,hy,hr,hr+1,1);
+    fillRect(cx-hr+1,hy-1,cx+hr,hy,8);                      // red glare
+    // gun forward
+    int handx=cx+tw+4, handy=shY+3, gl=(type==2?9:type==3?7:5);
+    limb(cx+tw-2,shY+1,handx,handy,2,1);
+    fillRect(handx-3,handy-1,handx+gl,handy+1,5);
+    fillDisc(handx-1,handy,2,2,1);
+    // rear arm
+    limb(cx-tw+1,shY+2,cx-tw-1,hipY-6,2,1);
+    // type extras
+    if(type==3){ fillRect(cx-hr,hy-hr-2,cx-hr+1,hy-hr+1,1); fillRect(cx+hr-1,hy-hr-2,cx+hr,hy-hr+1,1);   // horns
+                 fillRect(cx-tw-1,shY-1,cx-tw+2,shY+1,7); fillRect(cx+tw-2,shY-1,cx+tw+1,shY+1,7); }     // pauldrons
+    if(type==1){ fillRect(cx-tw,shY-1,cx-tw+3,shY+1,7); fillRect(cx+tw-3,shY-1,cx+tw,shY+1,7); }         // brute slabs
 }
-static Image EnemyFrame(Color cloth,int type,int legPhase){ BuildEnemy(type,legPhase); return ShadeBuf(cloth); }
+static Image EnemyFrame(Color cloth,int type,int frame){ BuildEnemy(type,frame); return ShadeBuf(cloth); }
 static int iclamp(int v,int a,int b){ return v<a?a:(v>b?b:v); }
 static Image ImgStone(Color base,int cracked){
     int n=TILE; Image im=GenImageColor(n,n,base);
@@ -1074,7 +1098,7 @@ static int DumpSprites(void){
     a[n++]=HeroFrame(blue,0,0,0,0);      // idle
     a[n++]=HeroFrame(blue,1,0,0,0);      // walk A
     a[n++]=HeroFrame(blue,3,0,0,0);      // walk C
-    a[n++]=HeroFrame(blue,0,1,0,0);      // fire
+    a[n++]=HeroFrame(blue,0,2,0,0);      // fire (muzzle flash)
     a[n++]=HeroFrame(blue,0,0,-2,0);     // hurt (head back)
     a[n++]=HeroFrame(blue,0,0,0,1);      // climb
     a[n++]=EnemyFrame((Color){200,72,72,255},0,0);   // skarl
@@ -1083,7 +1107,7 @@ static int DumpSprites(void){
     a[n++]=EnemyFrame((Color){164,44,64,255},3,0);   // maldrak
     a[n++]=ImgStone((Color){58,54,64,255},0);
     a[n++]=ImgStone((Color){78,64,52,255},1);
-    Image sheet=GenImageColor(1060,170,(Color){26,26,34,255});
+    Image sheet=GenImageColor(1640,220,(Color){26,26,34,255});
     int x=12, sc=3;
     for(int i=0;i<n;i++){ ImageDraw(&sheet,a[i],(Rectangle){0,0,(float)a[i].width,(float)a[i].height},(Rectangle){(float)x,20,(float)a[i].width*sc,(float)a[i].height*sc},WHITE); x+=a[i].width*sc+10; UnloadImage(a[i]); }
     ExportImage(sheet,"thorn-sprites.png"); UnloadImage(sheet);
