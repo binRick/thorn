@@ -563,7 +563,7 @@ static void Fire(int dir){
         float endx=mx+dir*(hi>=0?(g_en[hi].x+EW*0.5f-mx)*dir:P_RANGE); SpawnShot(mx,my,endx,my,0);
         if(hi>=0) HitEnemy(hi,dmg);
     }
-    P.fireCD=cd; P.muzzle=0.09f; P.muzzleDir=dir;
+    P.fireCD=cd; P.muzzle=(dir!=P.face)?0.18f:0.09f; P.muzzleDir=dir;
     if(special){ if(--P.weaponAmmo<=0){ P.weapon=0; P.weaponAmmo=0; Ev("ammo out - back to rifle"); DebugLog("weapon","\"depleted\":true"); } }
     else P.mag--;
     if(!silentFire) SndPlay(SND_FIRE);
@@ -1012,7 +1012,7 @@ static void BuildHero(int frame,int mode,int lean,int reach){
     if(reach){
         limb(cx-4,shY+1,cx-6,shY-9,2,1); limb(cx+4,shY+1,cx+6,shY-9,2,1);   // both arms up
         fillDisc(cx-6,shY-10,2,2,1); fillDisc(cx+6,shY-10,2,2,1);
-    } else if(mode>=1){
+    } else if(mode>=1 && mode<=2){   // AIM FORWARD
         int handx=cx+13, handy=shY+3;
         limb(shRx,shY+1,cx+10,shY+2,3,1); limb(cx+10,shY+2,handx,handy,2,3); // upper arm + bare forearm
         limb(shLx,shY+2,cx+5,shY+5,2,1);                    // support arm
@@ -1022,6 +1022,16 @@ static void BuildHero(int frame,int mode,int lean,int reach){
         fillRect(handx+1,handy-3,handx+3,handy-2,2);        // sight
         fillDisc(handx-1,handy,2,2,1);                      // front hand
         if(mode==2){ fillDisc(handx+10,handy,3,3,9); fillRect(handx+10,handy-1,handx+13,handy+1,9); }
+    } else if(mode>=3){              // OVER-THE-SHOULDER: gun swung behind (body still faces forward)
+        int handx=cx-13, handy=shY+2;
+        limb(shLx,shY+1,cx-10,shY+1,3,1); limb(cx-10,shY+1,handx,handy,2,3); // arm reaches back
+        limb(shRx,shY+2,cx-5,shY+4,2,1);                    // support arm across the chest
+        fillRect(handx-8,handy-2,handx+4,handy+1,5);        // rifle body+barrel (points back)
+        fillRect(handx+3,handy-1,handx+6,handy+1,2);        // stock
+        fillRect(handx+3,handy+1,handx+5,handy+4,5);        // grip
+        fillRect(handx-3,handy-3,handx-1,handy-2,2);        // sight
+        fillDisc(handx+1,handy,2,2,1);                      // hand
+        if(mode==4){ fillDisc(handx-10,handy,3,3,9); fillRect(handx-13,handy-1,handx-10,handy+1,9); }
     } else {
         // near arm holds the rifle ready, swinging slightly with the stride
         float a=ph; float sw=run?sinf(a):0;
@@ -1097,7 +1107,7 @@ static int g_sprites=0;
 // Drop-in sprite strips: external PNGs in assets/sprites/ (horizontal frame
 // strips). Loaded if present, else the generated art is the fallback.
 typedef struct { Texture2D tex; int frames; float fps; int ok; } Strip;
-static Strip g_sHeroIdle,g_sHeroWalk,g_sHeroFire,g_sHeroHurt,g_sHeroClimb,g_sEnemy[4];
+static Strip g_sHeroIdle,g_sHeroWalk,g_sHeroFire,g_sHeroFireBack,g_sHeroHurt,g_sHeroClimb,g_sEnemy[4];
 static Strip LoadStrip(const char*path,int frames,float fps){
     Strip s; s.tex=(Texture2D){0}; s.frames=frames<1?1:frames; s.fps=fps; s.ok=0;
     if(FileExists(path)){ s.tex=LoadTexture(path); if(s.tex.id>0){ SetTextureFilter(s.tex,TEXTURE_FILTER_POINT); s.ok=1; } }
@@ -1125,6 +1135,7 @@ static void InitSprites(void){
     g_sHeroIdle=LoadStrip("assets/sprites/hero_idle.png",2,4.0f);     // breathe
     g_sHeroWalk=LoadStrip("assets/sprites/hero_walk.png",6,13.0f);    // walk cycle
     g_sHeroFire=LoadStrip("assets/sprites/hero_fire.png",2,16.0f);     // recoil/aim
+    g_sHeroFireBack=LoadStrip("assets/sprites/hero_fireback.png",2,16.0f); // over-the-shoulder
     g_sHeroHurt=LoadStrip("assets/sprites/hero_hurt.png",1,1.0f);     // flinch
     g_sHeroClimb=LoadStrip("assets/sprites/hero_climb.png",2,6.0f);   // reach cycle
     g_sEnemy[0]=LoadStrip("assets/sprites/skarl.png",2,3.0f);
@@ -1136,11 +1147,12 @@ static void InitSprites(void){
 // Export the sprites to a PNG (no window needed) for visual review.
 static int DumpSprites(void){
     Color blue={92,150,235,255};
-    Image a[12]; int n=0;
+    Image a[14]; int n=0;
     a[n++]=HeroFrame(blue,0,0,0,0);      // idle
     a[n++]=HeroFrame(blue,1,0,0,0);      // walk A
     a[n++]=HeroFrame(blue,3,0,0,0);      // walk C
     a[n++]=HeroFrame(blue,0,2,0,0);      // fire (muzzle flash)
+    a[n++]=HeroFrame(blue,0,4,0,0);      // fire over-the-shoulder
     a[n++]=HeroFrame(blue,0,0,-2,0);     // hurt (head back)
     a[n++]=HeroFrame(blue,0,0,0,1);      // climb
     a[n++]=EnemyFrame((Color){200,72,72,255},0,0);   // skarl
@@ -1149,7 +1161,7 @@ static int DumpSprites(void){
     a[n++]=EnemyFrame((Color){164,44,64,255},3,0);   // maldrak
     a[n++]=ImgStone((Color){58,54,64,255},0);
     a[n++]=ImgStone((Color){78,64,52,255},1);
-    Image sheet=GenImageColor(1640,220,(Color){26,26,34,255});
+    Image sheet=GenImageColor(1780,220,(Color){26,26,34,255});
     int x=12, sc=3;
     for(int i=0;i<n;i++){ ImageDraw(&sheet,a[i],(Rectangle){0,0,(float)a[i].width,(float)a[i].height},(Rectangle){(float)x,20,(float)a[i].width*sc,(float)a[i].height*sc},WHITE); x+=a[i].width*sc+10; UnloadImage(a[i]); }
     ExportImage(sheet,"thorn-sprites.png"); UnloadImage(sheet);
@@ -1169,6 +1181,7 @@ static int GenAssets(void){
     { Image f0=HeroFrame(blue,0,0,0,0),f1=HeroFrame(blue,0,0,0,0); Image fr[2]={f0,f1}; StripExport("assets/sprites/hero_idle.png",fr,2,bob); UnloadImage(f0); UnloadImage(f1); }
     { Image w[6]; for(int k=0;k<6;k++) w[k]=HeroFrame(blue,k+1,0,0,0); StripExport("assets/sprites/hero_walk.png",w,6,NULL); for(int k=0;k<6;k++) UnloadImage(w[k]); }
     { Image f0=HeroFrame(blue,0,1,0,0),f1=HeroFrame(blue,0,2,0,0); Image fr[2]={f0,f1}; StripExport("assets/sprites/hero_fire.png",fr,2,NULL); UnloadImage(f0); UnloadImage(f1); }
+    { Image f0=HeroFrame(blue,0,4,0,0),f1=HeroFrame(blue,0,3,0,0); Image fr[2]={f0,f1}; StripExport("assets/sprites/hero_fireback.png",fr,2,NULL); UnloadImage(f0); UnloadImage(f1); }
     { Image f=HeroFrame(blue,0,0,-2,0); Image fr[1]={f}; StripExport("assets/sprites/hero_hurt.png",fr,1,NULL); UnloadImage(f); }
     { Image c0=HeroFrame(blue,0,0,0,1),c1=HeroFrame(blue,0,0,0,1); Image fr[2]={c0,c1}; int yo[2]={0,1}; StripExport("assets/sprites/hero_climb.png",fr,2,yo); UnloadImage(c0); UnloadImage(c1); }
     const char*ef[4]={"skarl","brute","sentry","maldrak"};
@@ -1319,6 +1332,7 @@ static void DrawWorld(void){
         if(g_sprites){ float a=P.inCover?0.5f:(P.iframes>0?0.5f:1.0f); int moving=fabsf(P.vx)>5; Strip*s=NULL;
             if(P.climbT>0 && g_sHeroClimb.ok) s=&g_sHeroClimb;
             else if(P.hurtT>0 && g_sHeroHurt.ok) s=&g_sHeroHurt;
+            else if(P.muzzle>0 && P.muzzleDir!=P.face && g_sHeroFireBack.ok) s=&g_sHeroFireBack;
             else if(P.muzzle>0 && g_sHeroFire.ok) s=&g_sHeroFire;
             else if(moving && g_sHeroWalk.ok) s=&g_sHeroWalk;
             else if(g_sHeroIdle.ok) s=&g_sHeroIdle;
