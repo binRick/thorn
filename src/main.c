@@ -552,7 +552,7 @@ static void Fire(int dir){
         if(hi>=0) HitEnemy(hi,dmg);
     }
     P.fireCD=cd; P.muzzle=0.09f; P.muzzleDir=dir; if(!special) P.mag--; SndPlay(SND_FIRE);
-    Emit(mx,my,7,360,0.16f,2.2f,(Color){255,220,130,255},1,0); if(!special) Emit(P.x+PW*0.5f,gunY(),1,110,0.6f,1.6f,(Color){210,180,90,255},0,1);
+    Emit(mx,my,16,460,0.20f,3.0f,(Color){255,225,150,255},1,0); g_shake=fmaxf(g_shake,1.6f); if(!special) Emit(P.x+PW*0.5f,gunY(),1,110,0.6f,1.6f,(Color){210,180,90,255},0,1);
     DebugLog("fire","\"dir\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"face\":%d,\"dmg\":%d,\"wpn\":%d,\"mag\":%d",dir==P.face?"fwd":"back",mx,my,P.face,dmg,P.weapon,P.mag);
     if(!special && P.mag==0 && P.reserve>0){ P.reloadT=RELOAD_T; SndPlay(SND_RELOAD); DebugLog("reload","\"start\":true,\"reserve\":%d",P.reserve); }
     Ev("fire %s", dir==P.face?"fwd":"back");
@@ -1286,7 +1286,16 @@ static void DrawWorld(void){
             DrawRectangle((int)bx,(int)e->y-7,(int)bw,4,(Color){40,40,40,255});
             DrawRectangle((int)bx,(int)e->y-7,(int)(bw*e->hp/(float)e->maxhp),4,e->type==3?(Color){230,90,90,255}:(Color){90,220,90,255}); }
     }
-    for(int i=0;i<MAXSHOT;i++){ Shot*s=&g_shot[i]; if(s->age<0||s->age>0.09f) continue; Color c=s->owner?(Color){255,150,60,255}:(Color){120,230,255,255}; DrawLineEx((Vector2){s->x1,s->y1},(Vector2){s->x2,s->y2},3,c); }
+    BeginBlendMode(BLEND_ADDITIVE);   // bullets travel along the shot line with a glowing trail
+    for(int i=0;i<MAXSHOT;i++){ Shot*s=&g_shot[i]; if(s->age<0) continue;
+        float dx=s->x2-s->x1,dy=s->y2-s->y1,len=sqrtf(dx*dx+dy*dy); if(len<1)len=1;
+        float spd=2200.0f,trav=spd*s->age; Color c=s->owner?(Color){255,150,70,255}:(Color){150,228,255,255};
+        if(trav<len){ float nx=dx/len,ny=dy/len,bx=s->x1+nx*trav,by=s->y1+ny*trav,t1=trav-20; if(t1<0)t1=0;
+            DrawLineEx((Vector2){s->x1+nx*t1,s->y1+ny*t1},(Vector2){bx,by},3,(Color){c.r,c.g,c.b,110});
+            DrawCircleV((Vector2){bx,by},3.4f,c); DrawCircleV((Vector2){bx,by},1.5f,(Color){255,255,255,255}); }
+        else { float since=s->age-len/spd; if(since<0.07f){ float a=1.0f-since/0.07f; DrawCircleV((Vector2){s->x2,s->y2},2.0f+7.0f*a,(Color){255,235,180,(unsigned char)(235*a)}); } }
+    }
+    EndBlendMode();
     for(int i=0;i<MAXBOMB;i++) if(g_bomb[i].active){ Bomb*b=&g_bomb[i]; DrawCircle((int)b->x,(int)b->y-6,9,(Color){40,40,46,255}); int blink=((int)(b->fuse*8))&1; DrawCircle((int)b->x,(int)b->y-16,3,blink?(Color){255,80,60,255}:(Color){110,40,30,255}); }
     if(g_boomT>0){ float k=1.0f-(g_boomT/0.35f); float rad=BOMB_RADIUS*k; DrawCircleLines((int)g_boomX,(int)g_boomY,rad,(Color){255,180,60,(unsigned char)(220*(1-k))}); DrawCircle((int)g_boomX,(int)g_boomY,rad*0.5f,(Color){255,140,40,(unsigned char)(120*(1-k))}); }
     if(!P.dead){
@@ -1298,7 +1307,10 @@ static void DrawWorld(void){
             else if(g_sHeroIdle.ok) s=&g_sHeroIdle;
             if(s) DrawActorStrip(s,AnimF(s),P.x,P.y,PW,PH,P.face,a,0);
             else { Texture2D ht=(moving && ((int)(GetTime()*8)&1))?g_tHeroWalk:g_tHeroIdle; DrawActorTex(ht,P.x,P.y,PW,PH,P.face,a,0); }
-            if(P.muzzle>0) DrawCircle((int)(P.muzzleDir>0?P.x+PW+6:P.x-6),(int)(P.y+PH*0.42f+2),8,(Color){255,230,120,235}); }
+            if(P.muzzle>0){ float mxp=P.muzzleDir>0?P.x+PW+8:P.x-8, myp=P.y+PH*0.42f+2, a=P.muzzle/0.09f; BeginBlendMode(BLEND_ADDITIVE);
+                DrawCircleV((Vector2){mxp,myp},10*a+3,(Color){255,235,160,(unsigned char)(235*a)}); DrawCircleV((Vector2){mxp,myp},5*a+1.5f,(Color){255,255,235,255});
+                for(int k=0;k<4;k++){ float an=k*1.5708f+0.6f; DrawLineEx((Vector2){mxp,myp},(Vector2){mxp+cosf(an)*(15*a+4),myp+sinf(an)*(15*a+4)},2,(Color){255,225,150,(unsigned char)(205*a)}); }
+                EndBlendMode(); } }
         else { Color pc = P.iframes>0?(Color){255,255,255,255}:(Color){90,150,235,255}; DrawFigure(P.x,P.y,PW,PH,P.face,pc,P.muzzle>0,P.muzzleDir,P.inCover); }
         if(P.meleeT>0){ float mx=P.face>0?P.x+PW:P.x; DrawLineEx((Vector2){mx,P.y+PH*0.30f},(Vector2){mx+P.face*24,P.y+PH*0.55f},3,(Color){235,240,255,225}); DrawLineEx((Vector2){mx,P.y+PH*0.58f},(Vector2){mx+P.face*22,P.y+PH*0.36f},2,(Color){200,220,255,150}); }   // knife slash
     } else DrawRectangle((int)P.x,(int)(P.y+PH-8),(int)PW,8,(Color){120,40,40,220});
