@@ -1247,10 +1247,12 @@ static void DrawWorld(void){
     for(int i=0;i<g_leverN;i++){ float x=g_levers[i].c*TILE+TILE*0.5f,y=(g_levers[i].r+1)*TILE; DrawRectangle((int)x-2,(int)y-10,4,10,(Color){120,120,130,255}); DrawCircle((int)(x+(g_bridgeOn?7:-7)),(int)y-12,5,g_bridgeOn?(Color){90,220,120,255}:(Color){220,90,90,255}); }
     for(int i=0;i<g_cpN;i++){ float x=g_cps[i].c*TILE+TILE*0.5f,y=(g_cps[i].r+1)*TILE; Color cc=g_cps[i].hit?(Color){90,200,120,220}:(Color){80,90,110,150}; DrawRectangle((int)x-2,(int)y-22,4,22,cc); DrawTriangle((Vector2){x+2,y-22},(Vector2){x+13,y-18},(Vector2){x+2,y-14},cc); }
     for(int i=0;i<g_doorN;i++){ Door*D=&g_doors[i]; float x=D->c*TILE,y=(D->r+1)*TILE; int locked=D->locked&&KeyCount(D->key)<=0;
-        Color fr=locked?(Color){180,150,60,255}:(Color){90,62,40,255};
-        DrawRectangle((int)x+4,(int)y-TILE-12,TILE-8,TILE+12,fr);
-        DrawRectangle((int)x+8,(int)y-TILE-8,TILE-16,TILE+8,(Color){26,20,16,255});
-        if(locked) DrawText("L",(int)x+13,(int)y-TILE+2,18,(Color){235,205,70,255});
+        Color fr=locked?(Color){180,150,60,255}:(Color){96,66,42,255};
+        int dh=TILE*2+8;                                              // doorway a touch taller than the hero
+        DrawRectangle((int)x+1,(int)y-dh,TILE-2,dh,fr);               // frame
+        DrawRectangle((int)x+1,(int)y-dh,TILE-2,4,shade(fr,1.45f));   // lintel highlight
+        DrawRectangle((int)x+5,(int)y-dh+5,TILE-10,dh-5,(Color){24,18,14,255}); // dark opening
+        if(locked) DrawText("L",(int)x+11,(int)y-dh/2-8,20,(Color){235,205,70,255});
     }
     for(int i=0;i<g_npcN;i++){ Npc*n=&g_npc[i]; float x=n->c*TILE+(TILE-EW)/2,y=(n->r+1)*TILE-EH; DrawFigure(x,y,EW,EH,1,n->freed?(Color){120,200,140,255}:(Color){150,150,160,255},0,1,0); }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive){ DrawRectangle((int)e->x,(int)(e->y+EH-8),(int)EW,8,(Color){90,30,30,200}); continue; }
