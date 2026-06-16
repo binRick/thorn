@@ -894,6 +894,7 @@ static Color matCol(int id,Color cloth){
         case 7: return shade(cloth,1.22f);
         case 8: return (Color){255,104,82,255};
         case 9: return (Color){255,224,150,255};
+        case 10:return (Color){208,56,56,255};
         default:return (Color){0,0,0,0};
     }
 }
@@ -944,8 +945,8 @@ static void BuildHero(int frame,int mode,int lean,int reach){
     for(int sde=0;sde<2;sde++){
         int hipx=cx+(sde?3:-3);
         float a=ph+(sde?SPR_PI:0); float sw=run?sinf(a):0;
-        int footx=hipx+(int)(10*sw);
-        int footy=(int)(groundY-(run?8.0f*fmaxf(0,sinf(a+0.6f)):0));
+        int footx=hipx+(int)(14*sw);
+        int footy=(int)(groundY-(run?10.0f*fmaxf(0,sinf(a+0.6f)):0));
         int kneex=(hipx+footx)/2+(sw>0?2:1), kneey=(hipY+footy)/2+1;
         limb(hipx,hipY,kneex,kneey,3,1);
         limb(kneex,kneey,footx,footy,2,1);
@@ -960,11 +961,14 @@ static void BuildHero(int frame,int mode,int lean,int reach){
     fillRect(cx-6,shY+11,cx+6,shY+11,2);                    // ab line
     fillRect(cx-6,hipY-3,cx+6,hipY,2); fillRect(cx-2,hipY-2,cx+2,hipY-1,7);// belt+buckle
     fillRect(cx-6,shY,cx-4,shY+2,7); fillRect(cx+4,shY,cx+6,shY+2,7);      // shoulder pads
-    // head
-    fillDisc(hx,shY-8,5,6,1);
-    fillRect(hx-1,shY-16,hx+1,shY-10,1); fillRect(hx+1,shY-15,hx+1,shY-10,7); // crest
-    fillRect(hx-2,shY-7,hx+4,shY-5,4);                      // visor band
-    fillRect(hx-4,shY-3,hx+3,shY-1,2);                      // jaw shadow
+    // head: face + bandana (run-and-gun commando)
+    fillDisc(hx,shY-8,4,6,3);                               // skin head/face
+    fillRect(hx-4,shY-14,hx+4,shY-11,2);                    // hair
+    fillRect(hx-2,shY-11,hx+4,shY-10,2);
+    fillRect(hx-4,shY-9,hx+4,shY-8,10);                     // headband
+    fillRect(hx+2,shY-9,hx+4,shY-8,7);                      // headband shine
+    fillRect(hx+1,shY-6,hx+2,shY-5,2);                      // eye
+    fillRect(hx-4,shY-3,hx+2,shY-2,2);                      // jaw shadow
     // arms + gun
     int shRx=cx+5, shLx=cx-5;
     if(reach){
@@ -972,7 +976,7 @@ static void BuildHero(int frame,int mode,int lean,int reach){
         fillDisc(cx-6,shY-10,2,2,1); fillDisc(cx+6,shY-10,2,2,1);
     } else if(mode>=1){
         int handx=cx+13, handy=shY+3;
-        limb(shRx,shY+1,cx+10,shY+2,3,1); limb(cx+10,shY+2,handx,handy,2,1); // gun arm fwd
+        limb(shRx,shY+1,cx+10,shY+2,3,1); limb(cx+10,shY+2,handx,handy,2,3); // upper arm + bare forearm
         limb(shLx,shY+2,cx+5,shY+5,2,1);                    // support arm
         fillRect(handx-4,handy-2,handx+8,handy+1,5);        // rifle body+barrel
         fillRect(handx-6,handy-1,handx-3,handy+1,2);        // stock
@@ -985,7 +989,7 @@ static void BuildHero(int frame,int mode,int lean,int reach){
         float a=ph; float sw=run?sinf(a):0;
         int handx=cx+9+(int)(3*sw), handy=shY+8+(int)(2*sw);
         int elbx=(shRx+handx)/2+1, elby=(shY+2+handy)/2;
-        limb(shRx,shY+1,elbx,elby,2,1); limb(elbx,elby,handx,handy,2,1);
+        limb(shRx,shY+1,elbx,elby,2,1); limb(elbx,elby,handx,handy,2,3);   // bare forearm
         fillRect(handx-2,handy-1,handx+8,handy,5); fillRect(handx+6,handy-2,handx+8,handy-1,5);
         fillRect(handx-4,handy,handx-2,handy+2,5);          // grip
         fillDisc(handx-1,handy,2,2,1);                      // gloved hand
