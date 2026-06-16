@@ -1,5 +1,12 @@
 # Thorn
 
+[![lines of code](https://repostats.app/badge/binRick/thorn.svg?metric=loc)](https://repostats.app/?url=https://github.com/binRick/thorn)
+[![complexity](https://repostats.app/badge/binRick/thorn.svg?metric=complexity)](https://repostats.app/?url=https://github.com/binRick/thorn)
+[![estimated cost](https://repostats.app/badge/binRick/thorn.svg?metric=cost)](https://repostats.app/?url=https://github.com/binRick/thorn)
+
+Code stats (`scc` via [repostats.app](https://repostats.app)) ·
+**[play in browser](https://binrick.github.io/thorn/)**
+
 A cinematic-platformer tribute to Blizzard's **Blackthorne** (1994), written in C
 on **raylib 6.0**. Weighty traversal (with a jump); a pump-shotgun that fires forward
 **and over the shoulder**; ducking into background **shadow alcoves** to let
