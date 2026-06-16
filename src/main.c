@@ -1289,14 +1289,34 @@ static void DrawWorld(void){
         for(int k=0;k<4;k++) DrawTriangle((Vector2){c*TILE+k*8.0f,(r+1)*TILE},(Vector2){c*TILE+k*8.0f+4,(r+1)*TILE-14},(Vector2){c*TILE+k*8.0f+8,(r+1)*TILE},(Color){180,60,60,255});
     for(int i=0;i<g_liftN;i++){ Lift*L=&g_lifts[i]; DrawRectangle((int)L->x,(int)L->y,(int)L->w,(int)L->h,(Color){100,104,120,255}); DrawRectangle((int)L->x,(int)L->y,(int)L->w,3,(Color){150,156,175,255}); }
     for(int i=0;i<g_pkN;i++){ Pickup*p=&g_pk[i]; if(!p->alive) continue; float x=p->c*TILE+TILE*0.5f, y=(p->r+1)*TILE-20;
-        if(p->kind=='H'){ DrawRectangle((int)x-4,(int)y-13,9,26,(Color){70,220,90,255}); DrawRectangle((int)x-13,(int)y-4,26,9,(Color){70,220,90,255}); }
-        else if(p->kind=='K'){ DrawCircle((int)x-6,(int)y,9,(Color){235,205,70,255}); DrawCircle((int)x-6,(int)y,4,(Color){40,34,16,255}); DrawRectangle((int)x-2,(int)y-3,18,6,(Color){235,205,70,255}); DrawRectangle((int)x+13,(int)y+3,5,6,(Color){235,205,70,255}); }
-        else if(p->kind=='B'){ DrawCircle((int)x,(int)y,12,(Color){50,50,60,255}); DrawCircle((int)x-3,(int)y-3,4,(Color){90,90,104,255}); DrawRectangle((int)x-2,(int)y-19,3,8,(Color){200,120,40,255}); }
-        else if(p->kind=='*'){ DrawPoly((Vector2){x,y},4,13,45,(Color){90,220,235,255}); DrawPolyLines((Vector2){x,y},4,13,45,(Color){205,250,255,255}); }
-        else if(p->kind=='a'){ DrawRectangle((int)x-10,(int)y-7,20,15,(Color){170,135,70,255}); DrawRectangleLines((int)x-10,(int)y-7,20,15,(Color){90,70,40,255}); DrawRectangle((int)x-10,(int)y-7,20,4,(Color){200,165,95,255}); }
-        else if(p->kind=='W'||p->kind=='Y'||p->kind=='Z'||p->kind=='F'||p->kind=='R'){ Color wc=p->kind=='W'?(Color){90,170,255,255}:p->kind=='Y'?(Color){255,170,70,255}:p->kind=='Z'?(Color){120,240,210,255}:p->kind=='F'?(Color){255,110,50,255}:(Color){215,210,95,255}; const char*wl=p->kind=='W'?"S":p->kind=='Y'?"M":p->kind=='Z'?"L":p->kind=='F'?"F":"R"; DrawCircle((int)x,(int)y,12,(Color){26,26,36,255}); DrawCircle((int)x,(int)y,9,wc); DrawCircleLines((int)x,(int)y,12,(Color){240,245,255,255}); int tw=MeasureText(wl,16); DrawText(wl,(int)x-tw/2,(int)y-8,16,(Color){18,18,26,255}); }
-        else if(p->kind=='u'){ DrawPoly((Vector2){x,y},3,15,-90,(Color){120,170,255,255}); }   // speed upgrade
-        else if(p->kind=='U'){ DrawPoly((Vector2){x,y},3,15,-90,(Color){255,120,120,255}); }   // power upgrade
+        { BeginBlendMode(BLEND_ADDITIVE); float pl=0.5f+0.3f*sinf((float)GetTime()*3.0f+i*0.8f); DrawCircle((int)x,(int)y,16,(Color){255,236,196,(unsigned char)(48*pl)}); EndBlendMode(); }  // shimmer
+        if(p->kind=='H'){            // medkit: white case + red cross
+            DrawRectangleRounded((Rectangle){x-12,y-10,24,20},0.35f,6,(Color){38,42,50,255});
+            DrawRectangleRounded((Rectangle){x-10,y-8,20,16},0.35f,6,(Color){236,238,242,255});
+            DrawRectangle((int)x-2,(int)y-6,5,12,(Color){214,52,52,255}); DrawRectangle((int)x-6,(int)y-2,12,5,(Color){214,52,52,255}); }
+        else if(p->kind=='K'){       // key: bow ring + shaft + teeth
+            DrawRectangle((int)x-3,(int)y-2,16,5,(Color){233,200,66,255}); DrawRectangle((int)x-3,(int)y-2,16,2,(Color){252,232,140,255});
+            DrawRectangle((int)x+10,(int)y+3,3,6,(Color){233,200,66,255}); DrawRectangle((int)x+14,(int)y+3,3,4,(Color){233,200,66,255});
+            DrawCircle((int)x-8,(int)y,7,(Color){233,200,66,255}); DrawCircle((int)x-8,(int)y,3,(Color){26,26,36,255}); DrawCircleLines((int)x-8,(int)y,7,(Color){252,232,140,255}); }
+        else if(p->kind=='B'){       // bomb: body + sheen + fuse + lit spark
+            DrawCircle((int)x,(int)y+2,11,(Color){46,46,54,255}); DrawCircle((int)x-3,(int)y-1,4,(Color){92,92,108,255});
+            DrawRectangle((int)x-1,(int)y-12,3,8,(Color){122,92,56,255});
+            float sp=0.6f+0.4f*sinf((float)GetTime()*12.0f); DrawCircle((int)x+1,(int)y-13,3,(Color){255,(unsigned char)(150*sp+70),40,255}); }
+        else if(p->kind=='*'){       // Daystone shard: faceted crystal
+            DrawPoly((Vector2){x,y},6,13,90,(Color){66,198,224,255}); DrawPolyLines((Vector2){x,y},6,13,90,(Color){205,250,255,255});
+            DrawLine((int)x,(int)y-12,(int)x,(int)y+12,(Color){150,236,250,200}); DrawLine((int)x-7,(int)y-4,(int)x+7,(int)y+4,(Color){150,236,250,150}); DrawCircle((int)x-3,(int)y-4,2,(Color){240,255,255,255}); }
+        else if(p->kind=='a'){       // ammo crate with shells poking out
+            for(int k=0;k<3;k++){ int sk=(int)x-8+k*7; DrawRectangle(sk,(int)y-10,5,7,(Color){200,62,52,255}); DrawRectangle(sk,(int)y-10,5,3,(Color){226,196,98,255}); }
+            DrawRectangle((int)x-11,(int)y-4,22,12,(Color){120,95,55,255}); DrawRectangle((int)x-11,(int)y-4,22,3,(Color){152,122,74,255}); DrawRectangleLines((int)x-11,(int)y-4,22,12,(Color){70,54,32,255}); }
+        else if(p->kind=='W'||p->kind=='Y'||p->kind=='Z'||p->kind=='F'||p->kind=='R'){   // weapon capsule pod
+            Color wc=p->kind=='W'?(Color){90,170,255,255}:p->kind=='Y'?(Color){255,170,70,255}:p->kind=='Z'?(Color){120,240,210,255}:p->kind=='F'?(Color){255,110,50,255}:(Color){215,210,95,255};
+            const char*wl=p->kind=='W'?"S":p->kind=='Y'?"M":p->kind=='Z'?"L":p->kind=='F'?"F":"R";
+            DrawRectangleRounded((Rectangle){x-14,y-9,28,18},0.9f,8,(Color){26,26,38,255}); DrawRectangleRounded((Rectangle){x-12,y-7,24,14},0.9f,8,wc);
+            DrawCircle((int)x-4,(int)y-2,3,(Color){255,255,255,110}); int tw=MeasureText(wl,16); DrawText(wl,(int)x-tw/2,(int)y-8,16,(Color){18,18,26,255}); }
+        else if(p->kind=='u'){       // speed: double cyan chevron
+            for(int k=0;k<2;k++){ int yo=k*7-2; DrawLineEx((Vector2){x-7,y+yo+5},(Vector2){x,y+yo-3},3,(Color){120,200,255,255}); DrawLineEx((Vector2){x,y+yo-3},(Vector2){x+7,y+yo+5},3,(Color){120,200,255,255}); } }
+        else if(p->kind=='U'){       // power: bold red up-arrow
+            DrawTriangle((Vector2){x-9,y+1},(Vector2){x,y-11},(Vector2){x+9,y+1},(Color){255,92,82,255}); DrawRectangle((int)x-3,(int)y+1,6,9,(Color){255,92,82,255}); }
     }
     for(int i=0;i<g_leverN;i++){ float x=g_levers[i].c*TILE+TILE*0.5f,y=(g_levers[i].r+1)*TILE; DrawRectangle((int)x-2,(int)y-10,4,10,(Color){120,120,130,255}); DrawCircle((int)(x+(g_bridgeOn?7:-7)),(int)y-12,5,g_bridgeOn?(Color){90,220,120,255}:(Color){220,90,90,255}); }
     for(int i=0;i<g_cpN;i++){ float x=g_cps[i].c*TILE+TILE*0.5f,y=(g_cps[i].r+1)*TILE; Color cc=g_cps[i].hit?(Color){90,200,120,220}:(Color){80,90,110,150}; DrawRectangle((int)x-2,(int)y-22,4,22,cc); DrawTriangle((Vector2){x+2,y-22},(Vector2){x+13,y-18},(Vector2){x+2,y-14},cc); }
