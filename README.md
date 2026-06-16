@@ -120,7 +120,9 @@ Release checklist:
 run.sh debug.sh Makefile   entry points + build (Makefile `raylib6` vendors raylib 6.0)
 DESIGN.md README.md         design doc + this file
 src/main.c                  the game (single translation unit)
+src/macicon.m               macOS-only: sets the Dock / Cmd-Tab icon (Cocoa)
 src/shell.html              page template for the `make web` (WebAssembly) build
+assets/thorn_icon.png       app icon (window icon + macOS Dock / Cmd-Tab)
 levels/<area>/*.lvl         room files for the four areas (external level data)
 assets/sprites/*.png        drop-in CC0 sprite strips (reskin by replacing these)
 vendor/                     vendored raylib 6.0 (gitignored, rebuilt on demand)

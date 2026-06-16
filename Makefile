@@ -6,6 +6,7 @@ BUILD   := build
 BIN     := $(BUILD)/$(NAME)
 SRC     := src/main.c
 HDRS    := $(wildcard src/*.h)
+PLATSRC :=                      # platform extras (e.g. macOS Cocoa icon), set per-OS below
 
 CC      ?= clang
 CFLAGS  ?= -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -DGL_SILENCE_DEPRECATION
@@ -18,6 +19,7 @@ LIBS       := $(RAYLIB_DIR)/lib/libraylib.a
 ifeq ($(UNAME_S),Darwin)
   LIBS += -framework OpenGL -framework Cocoa -framework IOKit \
           -framework CoreVideo -framework CoreAudio
+  PLATSRC := src/macicon.m      # sets the Dock / Cmd-Tab icon (Cocoa)
 endif
 ifeq ($(UNAME_S),Linux)
   LIBS += -lm -lpthread -ldl -lrt -lX11
@@ -27,8 +29,8 @@ endif
 all: $(BIN)
 
 # Incremental: only relink when a source, header, or the raylib archive changes.
-$(BIN): $(SRC) $(HDRS) $(RAYLIB_DIR)/lib/libraylib.a | $(BUILD)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(SRC) $(LIBS)
+$(BIN): $(SRC) $(HDRS) $(PLATSRC) $(RAYLIB_DIR)/lib/libraylib.a | $(BUILD)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(SRC) $(PLATSRC) $(LIBS)
 
 $(BUILD):
 	mkdir -p $(BUILD)

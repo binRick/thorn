@@ -1505,6 +1505,10 @@ static void Frame(void){
 #endif
 }
 
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+extern void SetMacDockIcon(const char *path);   // src/macicon.m (Cocoa)
+#endif
+
 // ---- main -------------------------------------------------------------------
 int main(int argc,char**argv){
     int dump=0,genassets=0,docontinue=0; char pwarg[16]="";
@@ -1552,6 +1556,13 @@ int main(int argc,char**argv){
         SetTargetFPS(120);
         InitAudio();      // needs a live device; safe no-op if it fails to init
         InitSprites();    // uploads generated textures; needs the GL context above
+        if(FileExists("assets/thorn_icon.png")){          // window icon (Linux/Windows)
+            Image ic=LoadImage("assets/thorn_icon.png");
+            if(ic.data){ ImageFormat(&ic,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8); SetWindowIcon(ic); UnloadImage(ic); }
+        }
+#if defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+        SetMacDockIcon("assets/thorn_icon.png");          // Dock / Cmd-Tab (GLFW icon is a no-op on macOS)
+#endif
     }
 
     DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.9.1\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
