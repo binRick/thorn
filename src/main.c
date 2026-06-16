@@ -1207,25 +1207,28 @@ static void DrawWorld(void){
     float shx=0,shy=0; if(g_fx&&g_shake>0){ shx=((rand()%200)/100.0f-1.0f)*g_shake; shy=((rand()%200)/100.0f-1.0f)*g_shake; }
     Camera2D cam={ .offset={SCREEN_W*0.5f+shx,SCREEN_H*0.5f+shy}, .target={g_cam.x+SCREEN_W*0.5f,g_cam.y+SCREEN_H*0.5f}, .rotation=0, .zoom=1 };
     BeginMode2D(cam);
-    for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_alcove[r][c]){
+    int vc0=(int)(g_cam.x/TILE)-1, vc1=(int)((g_cam.x+SCREEN_W)/TILE)+1;   // only draw on-screen tiles
+    int vr0=(int)(g_cam.y/TILE)-1, vr1=(int)((g_cam.y+SCREEN_H)/TILE)+1;
+    if(vc0<0)vc0=0; if(vr0<0)vr0=0; if(vc1>g_W-1)vc1=g_W-1; if(vr1>g_H-1)vr1=g_H-1;
+    for(int r=vr0;r<=vr1;r++) for(int c=vc0;c<=vc1;c++) if(g_alcove[r][c]){
         DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){14,16,26,255});
         DrawRectangleLinesEx((Rectangle){c*TILE+3,r*TILE+3,TILE-6,TILE-6},2,(Color){40,44,70,255});
     }
-    for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_tiles[r][c]=='#' && !g_crack[r][c]){
+    for(int r=vr0;r<=vr1;r++) for(int c=vc0;c<=vc1;c++) if(g_tiles[r][c]=='#' && !g_crack[r][c]){
         if(g_sprites) DrawTexture(g_tStone,c*TILE,r*TILE,WHITE);
         else { DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){58,54,64,255}); DrawRectangle(c*TILE,r*TILE,TILE,4,(Color){92,86,104,255}); }
     }
-    for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_crack[r][c]){   // cracked walls read as breakable
+    for(int r=vr0;r<=vr1;r++) for(int c=vc0;c<=vc1;c++) if(g_crack[r][c]){   // cracked walls read as breakable
         if(g_sprites) DrawTexture(g_tCrack,c*TILE,r*TILE,WHITE);
         else { DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){78,64,52,255});
             DrawLineEx((Vector2){c*TILE+7,r*TILE+3},(Vector2){c*TILE+15,r*TILE+TILE-5},2,(Color){28,22,18,255});
             DrawLineEx((Vector2){c*TILE+22,r*TILE+5},(Vector2){c*TILE+13,r*TILE+19},2,(Color){28,22,18,255}); }
     }
-    for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_bridge[r][c]){
+    for(int r=vr0;r<=vr1;r++) for(int c=vc0;c<=vc1;c++) if(g_bridge[r][c]){
         if(g_bridgeOn){ if(g_sprites) DrawTexture(g_tBridge,c*TILE,r*TILE,WHITE); else { DrawRectangle(c*TILE,r*TILE,TILE,TILE,(Color){120,86,50,255}); DrawRectangle(c*TILE,r*TILE,TILE,4,(Color){160,120,70,255}); } }
         else DrawRectangleLinesEx((Rectangle){c*TILE+2,r*TILE+2,TILE-4,TILE-4},1,(Color){90,66,40,170}); // ghost
     }
-    for(int r=0;r<g_H;r++) for(int c=0;c<g_W;c++) if(g_spike[r][c])
+    for(int r=vr0;r<=vr1;r++) for(int c=vc0;c<=vc1;c++) if(g_spike[r][c])
         for(int k=0;k<4;k++) DrawTriangle((Vector2){c*TILE+k*8.0f,(r+1)*TILE},(Vector2){c*TILE+k*8.0f+4,(r+1)*TILE-14},(Vector2){c*TILE+k*8.0f+8,(r+1)*TILE},(Color){180,60,60,255});
     for(int i=0;i<g_liftN;i++){ Lift*L=&g_lifts[i]; DrawRectangle((int)L->x,(int)L->y,(int)L->w,(int)L->h,(Color){100,104,120,255}); DrawRectangle((int)L->x,(int)L->y,(int)L->w,3,(Color){150,156,175,255}); }
     for(int i=0;i<g_pkN;i++){ Pickup*p=&g_pk[i]; if(!p->alive) continue; float x=p->c*TILE+TILE*0.5f, y=(p->r+1)*TILE-16;
@@ -1545,7 +1548,7 @@ int main(int argc,char**argv){
 
     if(!g_headless){
         SetTraceLogLevel(LOG_WARNING);
-        SetConfigFlags(FLAG_MSAA_4X_HINT);
+        /* no MSAA: sprites are point-filtered, so MSAA only burns fill rate */
         InitWindow(SCREEN_W,SCREEN_H,"Thorn - cinematic platformer (raylib " THORN_RAYLIB ")");
         if(!IsWindowReady()){   // no display (SSH/CI/sandbox): bail before touching the GL context
             DebugLog("error","\"msg\":\"window-init-failed\"");
