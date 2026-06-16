@@ -1235,14 +1235,14 @@ static void DrawWorld(void){
     for(int r=vr0;r<=vr1;r++) for(int c=vc0;c<=vc1;c++) if(g_spike[r][c])
         for(int k=0;k<4;k++) DrawTriangle((Vector2){c*TILE+k*8.0f,(r+1)*TILE},(Vector2){c*TILE+k*8.0f+4,(r+1)*TILE-14},(Vector2){c*TILE+k*8.0f+8,(r+1)*TILE},(Color){180,60,60,255});
     for(int i=0;i<g_liftN;i++){ Lift*L=&g_lifts[i]; DrawRectangle((int)L->x,(int)L->y,(int)L->w,(int)L->h,(Color){100,104,120,255}); DrawRectangle((int)L->x,(int)L->y,(int)L->w,3,(Color){150,156,175,255}); }
-    for(int i=0;i<g_pkN;i++){ Pickup*p=&g_pk[i]; if(!p->alive) continue; float x=p->c*TILE+TILE*0.5f, y=(p->r+1)*TILE-16;
-        if(p->kind=='H'){ DrawRectangle((int)x-3,(int)y-9,6,18,(Color){70,220,90,255}); DrawRectangle((int)x-9,(int)y-3,18,6,(Color){70,220,90,255}); }
-        else if(p->kind=='K'){ DrawCircle((int)x-4,(int)y,6,(Color){235,205,70,255}); DrawRectangle((int)x,(int)y-2,12,4,(Color){235,205,70,255}); }
-        else if(p->kind=='B'){ DrawCircle((int)x,(int)y,8,(Color){50,50,60,255}); DrawRectangle((int)x-1,(int)y-12,2,5,(Color){200,120,40,255}); }
-        else if(p->kind=='*'){ DrawPoly((Vector2){x,y},4,9,45,(Color){90,220,235,255}); }
-        else if(p->kind=='a'){ DrawRectangle((int)x-7,(int)y-5,14,10,(Color){170,135,70,255}); DrawRectangleLines((int)x-7,(int)y-5,14,10,(Color){90,70,40,255}); }
-        else if(p->kind=='u'){ DrawPoly((Vector2){x,y},3,10,-90,(Color){120,170,255,255}); }   // speed upgrade
-        else if(p->kind=='U'){ DrawPoly((Vector2){x,y},3,10,-90,(Color){255,120,120,255}); }   // power upgrade
+    for(int i=0;i<g_pkN;i++){ Pickup*p=&g_pk[i]; if(!p->alive) continue; float x=p->c*TILE+TILE*0.5f, y=(p->r+1)*TILE-20;
+        if(p->kind=='H'){ DrawRectangle((int)x-4,(int)y-13,9,26,(Color){70,220,90,255}); DrawRectangle((int)x-13,(int)y-4,26,9,(Color){70,220,90,255}); }
+        else if(p->kind=='K'){ DrawCircle((int)x-6,(int)y,9,(Color){235,205,70,255}); DrawCircle((int)x-6,(int)y,4,(Color){40,34,16,255}); DrawRectangle((int)x-2,(int)y-3,18,6,(Color){235,205,70,255}); DrawRectangle((int)x+13,(int)y+3,5,6,(Color){235,205,70,255}); }
+        else if(p->kind=='B'){ DrawCircle((int)x,(int)y,12,(Color){50,50,60,255}); DrawCircle((int)x-3,(int)y-3,4,(Color){90,90,104,255}); DrawRectangle((int)x-2,(int)y-19,3,8,(Color){200,120,40,255}); }
+        else if(p->kind=='*'){ DrawPoly((Vector2){x,y},4,13,45,(Color){90,220,235,255}); DrawPolyLines((Vector2){x,y},4,13,45,(Color){205,250,255,255}); }
+        else if(p->kind=='a'){ DrawRectangle((int)x-10,(int)y-7,20,15,(Color){170,135,70,255}); DrawRectangleLines((int)x-10,(int)y-7,20,15,(Color){90,70,40,255}); DrawRectangle((int)x-10,(int)y-7,20,4,(Color){200,165,95,255}); }
+        else if(p->kind=='u'){ DrawPoly((Vector2){x,y},3,15,-90,(Color){120,170,255,255}); }   // speed upgrade
+        else if(p->kind=='U'){ DrawPoly((Vector2){x,y},3,15,-90,(Color){255,120,120,255}); }   // power upgrade
     }
     for(int i=0;i<g_leverN;i++){ float x=g_levers[i].c*TILE+TILE*0.5f,y=(g_levers[i].r+1)*TILE; DrawRectangle((int)x-2,(int)y-10,4,10,(Color){120,120,130,255}); DrawCircle((int)(x+(g_bridgeOn?7:-7)),(int)y-12,5,g_bridgeOn?(Color){90,220,120,255}:(Color){220,90,90,255}); }
     for(int i=0;i<g_cpN;i++){ float x=g_cps[i].c*TILE+TILE*0.5f,y=(g_cps[i].r+1)*TILE; Color cc=g_cps[i].hit?(Color){90,200,120,220}:(Color){80,90,110,150}; DrawRectangle((int)x-2,(int)y-22,4,22,cc); DrawTriangle((Vector2){x+2,y-22},(Vector2){x+13,y-18},(Vector2){x+2,y-14},cc); }
@@ -1254,7 +1254,7 @@ static void DrawWorld(void){
         DrawRectangle((int)x+5,(int)y-dh+5,TILE-10,dh-5,(Color){24,18,14,255}); // dark opening
         if(locked) DrawText("L",(int)x+11,(int)y-dh/2-8,20,(Color){235,205,70,255});
     }
-    for(int i=0;i<g_npcN;i++){ Npc*n=&g_npc[i]; float x=n->c*TILE+(TILE-EW)/2,y=(n->r+1)*TILE-EH; DrawFigure(x,y,EW,EH,1,n->freed?(Color){120,200,140,255}:(Color){150,150,160,255},0,1,0); }
+    for(int i=0;i<g_npcN;i++){ Npc*n=&g_npc[i]; float nw=EW*1.5f,nh=EH*1.5f,ncx=n->c*TILE+TILE*0.5f,ngy=(n->r+1)*TILE; DrawFigure(ncx-nw*0.5f,ngy-nh,nw,nh,1,n->freed?(Color){120,200,140,255}:(Color){150,150,160,255},0,1,0); }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive){ DrawRectangle((int)e->x,(int)(e->y+EH-8),(int)EW,8,(Color){90,30,30,200}); continue; }
         if(g_sprites){ float sc=e->type==3?1.7f:e->type==1?1.14f:1.0f, eh=EH*sc, ew=EW*sc, ax=e->x+EW*0.5f-ew*0.5f, ay=e->y+EH-eh, al=e->inCover?0.45f:1.0f;
             if(g_sEnemy[e->type].ok) DrawActorStrip(&g_sEnemy[e->type],AnimF(&g_sEnemy[e->type]),ax,ay,ew,eh,e->face,al,e->hitFlash>0);
