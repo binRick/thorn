@@ -62,7 +62,7 @@ loop. Click the canvas first so it captures the keyboard.
 | Move | `A`/`D` or `←`/`→` |
 | Up — climb ledge / enter shadow / use door / free NPC / lever | `W` or `↑` |
 | Down — climb down / leave shadow / duck | `S` or `↓` |
-| Walk (careful) | `Shift` |
+| Run (hold to sprint) | `Shift` |
 | **Jump** | `Space` |
 | Fire forward | `J` / `Ctrl` |
 | **Fire backward (over the shoulder)** | `K` |

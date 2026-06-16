@@ -72,7 +72,7 @@ static const char *JStr(const char *s){
 #define MAXFALL    1400.0f
 #define ACCEL      1500.0f
 #define RUN_SPD    210.0f
-#define WALK_SPD   95.0f
+#define WALK_SPD   135.0f
 #define FRICTION   1700.0f
 #define FALL_HURT  980.0f
 #define JUMP_V     540.0f          // jump impulse (~2.3 tiles high)
@@ -267,7 +267,7 @@ static Input DemoInput(void){
 static Input DemoFrameInput(long f){
     // Walk right and tap "up" often so the capture exercises levers, doors and
     // climbs as the bot passes them. Deterministic (a function of frame count).
-    Input in={0}; in.right=1;
+    Input in={0}; in.right=1; in.walk=1;   // hold Shift = run (covers ground like before the invert)
     if(f%96==1)  in.fireF=1;
     if(f%22==3)  in.up=1;     // ~5.5 Hz: throws levers / uses doors / climbs in passing
     if(f%440==220) in.fireB=1;
@@ -532,7 +532,7 @@ static void Fire(int dir){
     Emit(mx,my,7,360,0.16f,2.2f,(Color){255,220,130,255},1,0); Emit(P.x+PW*0.5f,gunY(),1,110,0.6f,1.6f,(Color){210,180,90,255},0,1);   // muzzle sparks + shell casing
     if(hitIdx>=0){ Enemy*e=&g_en[hitIdx]; e->hp-=dmg; e->hitFlash=0.12f; FloatDmg(e->x+EW*0.5f,e->y,dmg);
         if(e->hp<=0){ e->alive=0; e->st="DEAD"; PlayEnemyDeath(); Emit(e->x+EW*0.5f,e->y+EH*0.5f,16,300,0.6f,2.6f,(Color){170,30,30,255},0,1); g_shake=fmaxf(g_shake,7.0f); Ev("enemy %d killed",hitIdx); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"x\":%.1f,\"y\":%.1f",hitIdx,e->x,e->y); if(e->type==3){ g_victory=1; g_won=1; g_shake=20.0f; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
-        else { SndPlay(SND_HIT); Emit(e->x+EW*0.5f,e->y+EH*0.5f,7,240,0.35f,2.0f,(Color){200,40,40,255},0,1); DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":%d,\"hp\":%d",hitIdx,dmg,e->hp); }
+        else { SndPlay(SND_HIT); Emit(e->x+EW*0.5f,e->y+EH*0.5f,12,300,0.5f,2.3f,(Color){190,32,32,255},0,1); DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":%d,\"hp\":%d",hitIdx,dmg,e->hp); }
     }
     DebugLog("fire","\"dir\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"face\":%d,\"dmg\":%d,\"mag\":%d,\"hit\":%s,\"target\":%d",
              dir==P.face?"fwd":"back", mx,my,P.face,dmg,P.mag, hitIdx>=0?"true":"false", hitIdx);
@@ -557,7 +557,7 @@ static void Melee(void){
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive||e->inCover) continue; float ex=e->x+EW*0.5f, ey=e->y+EH*0.5f;
         if((ex-pcx())*P.face>0 && fabsf(ex-pcx())<40.0f+EW*0.5f && fabsf(ey-pcy())<TILE*0.8f){ hit=i; break; } }
     if(hit>=0){ Enemy*e=&g_en[hit]; e->hp-=45; e->hitFlash=0.12f; g_shake=fmaxf(g_shake,6.0f); FloatDmg(e->x+EW*0.5f,e->y,45);
-        Emit(e->x+EW*0.5f,e->y+EH*0.5f,8,240,0.35f,2.0f,(Color){200,40,40,255},0,1);
+        Emit(e->x+EW*0.5f,e->y+EH*0.5f,12,300,0.5f,2.3f,(Color){190,32,32,255},0,1);
         if(e->hp<=0){ e->alive=0; e->st="DEAD"; PlayEnemyDeath(); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"melee\"",hit); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } }
         else DebugLog("hit","\"who\":\"enemy\",\"i\":%d,\"dmg\":45,\"cause\":\"melee\"",hit); }
     DebugLog("melee","\"x\":%.1f,\"face\":%d,\"hit\":%s",pcx(),P.face,hit>=0?"true":"false"); Ev("knife%s",hit>=0?" HIT":"");
@@ -573,7 +573,7 @@ static void ExplodeBomb(float bx,float by){
             if((cx-bx)*(cx-bx)+(cy-by)*(cy-by) < BOMB_RADIUS*BOMB_RADIUS){ g_crack[r][c]=0; g_tiles[r][c]='.'; destroyed++; } }
     }
     for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive) continue; float ex=e->x+EW*0.5f,ey=e->y+EH*0.5f;
-        if((ex-bx)*(ex-bx)+(ey-by)*(ey-by)<BOMB_RADIUS*BOMB_RADIUS){ e->hp-=BOMB_DMG; e->hitFlash=0.12f; hits++; FloatDmg(e->x+EW*0.5f,e->y,BOMB_DMG);
+        if((ex-bx)*(ex-bx)+(ey-by)*(ey-by)<BOMB_RADIUS*BOMB_RADIUS){ e->hp-=BOMB_DMG; e->hitFlash=0.12f; hits++; FloatDmg(e->x+EW*0.5f,e->y,BOMB_DMG); Emit(e->x+EW*0.5f,e->y+EH*0.5f,12,320,0.5f,2.3f,(Color){190,32,32,255},0,1);
             if(e->hp<=0){ e->alive=0; e->st="DEAD"; PlayEnemyDeath(); DebugLog("death","\"who\":\"enemy\",\"i\":%d,\"cause\":\"bomb\"",i); if(e->type==3){ g_victory=1; g_won=1; DebugLog("victory",""); Ev("THE USURPER FALLS"); } } } }
     float pdx=pcx()-bx, pdy=pcy()-by; if(pdx*pdx+pdy*pdy<BOMB_RADIUS*BOMB_RADIUS) HurtPlayer(30,"bomb");
     g_boomT=0.35f; g_boomX=bx; g_boomY=by; SndPlay(SND_BOMB);
@@ -710,7 +710,7 @@ static void UpdatePlayer(Input in){
         }
     }
 
-    float target = in.walk?WALK_SPD:RUN_SPD; int d=in.right-in.left; P.turning=0;
+    float target = in.walk?RUN_SPD:WALK_SPD; int d=in.right-in.left; P.turning=0;   // Shift = run; default = walk
     if(d!=0){
         if(d==P.face || fabsf(P.vx)<40){ P.face=d; P.vx+=d*ACCEL*DT; P.vx=clampf(P.vx,-target,target); }
         else { P.vx-=sgn(P.vx)*FRICTION*1.6f*DT; if(fabsf(P.vx)<40){P.vx=0;P.face=d;} P.turning=1; }
@@ -1145,7 +1145,7 @@ static void DrawActorTex(Texture2D t,float ax,float ay,float aw,float ah,int fac
     Rectangle src={0,0,(float)(face>0?t.width:-t.width),(float)t.height};
     Rectangle dst={ax+aw*0.5f-dw*0.5f, ay+ah-(t.height*scale), dw, t.height*scale};
     DrawTexturePro(t,src,dst,(Vector2){0,0},0,(Color){255,255,255,(unsigned char)(alpha*255)});
-    if(flash) DrawRectangleRec(dst,(Color){255,255,255,150});
+    if(flash){ BeginBlendMode(BLEND_ADDITIVE); DrawTexturePro(t,src,dst,(Vector2){0,0},0,(Color){150,150,160,255}); EndBlendMode(); }
 }
 
 // Draw one frame of a sprite strip into the actor AABB (see Strip above).
@@ -1155,7 +1155,7 @@ static void DrawActorStrip(Strip*s,int frame,float ax,float ay,float aw,float ah
     Rectangle src={(float)(frame*fw),0,(float)(face>0?fw:-fw),(float)s->tex.height};
     Rectangle dst={ax+aw*0.5f-dw*0.5f, ay+ah-(s->tex.height*scale), dw, s->tex.height*scale};
     DrawTexturePro(s->tex,src,dst,(Vector2){0,0},0,(Color){255,255,255,(unsigned char)(alpha*255)});
-    if(flash) DrawRectangleRec(dst,(Color){255,255,255,150});
+    if(flash){ BeginBlendMode(BLEND_ADDITIVE); DrawTexturePro(s->tex,src,dst,(Vector2){0,0},0,(Color){150,150,160,255}); EndBlendMode(); }
 }
 
 // ---- Rendering --------------------------------------------------------------
