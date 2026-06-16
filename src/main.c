@@ -875,6 +875,7 @@ static void EmitState(void){
 // look. No external or third-party sprite data.
 #define SPR_W 26
 #define SPR_H 42
+#define SPR_SCALE 1.35f   // draw actors bigger than the hitbox, feet-anchored (fills headroom)
 static unsigned char g_idbuf[SPR_H][SPR_W];
 static Color shade(Color c,float f){
     int r=(int)(c.r*f),g=(int)(c.g*f),b=(int)(c.b*f);
@@ -1112,7 +1113,7 @@ static int GenAssets(void){
 }
 // Draw an actor texture into AABB (ax,ay,aw,ah), feet-aligned, flipped by face.
 static void DrawActorTex(Texture2D t,float ax,float ay,float aw,float ah,int face,float alpha,int flash){
-    float scale=ah/(float)t.height, dw=t.width*scale;
+    float scale=ah*SPR_SCALE/(float)t.height, dw=t.width*scale;
     Rectangle src={0,0,(float)(face>0?t.width:-t.width),(float)t.height};
     Rectangle dst={ax+aw*0.5f-dw*0.5f, ay+ah-(t.height*scale), dw, t.height*scale};
     DrawTexturePro(t,src,dst,(Vector2){0,0},0,(Color){255,255,255,(unsigned char)(alpha*255)});
@@ -1122,7 +1123,7 @@ static void DrawActorTex(Texture2D t,float ax,float ay,float aw,float ah,int fac
 // Draw one frame of a sprite strip into the actor AABB (see Strip above).
 static void DrawActorStrip(Strip*s,int frame,float ax,float ay,float aw,float ah,int face,float alpha,int flash){
     int fw=s->tex.width/s->frames; if(s->frames>1) frame%=s->frames; else frame=0;
-    float scale=ah/(float)s->tex.height, dw=fw*scale;
+    float scale=ah*SPR_SCALE/(float)s->tex.height, dw=fw*scale;
     Rectangle src={(float)(frame*fw),0,(float)(face>0?fw:-fw),(float)s->tex.height};
     Rectangle dst={ax+aw*0.5f-dw*0.5f, ay+ah-(s->tex.height*scale), dw, s->tex.height*scale};
     DrawTexturePro(s->tex,src,dst,(Vector2){0,0},0,(Color){255,255,255,(unsigned char)(alpha*255)});
