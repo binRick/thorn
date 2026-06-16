@@ -15,7 +15,7 @@ walk.mp3           — walking footstep loop (looped Music while Shift-walking)
                      original: u_3x9ga8wevj-walking-sound-effect-272246.mp3
 land.mp3           — landing after a fall/jump (SND_LAND)
                      original: freesound_community-land-81509.mp3
-jump.mp3           — jump (SND_JUMP)
+jump.mp3           — jump (SND_JUMP); dead air trimmed so it fires on the jump's onset
                      original: freesound_community-jump-scare-scream-82738.mp3
 portal.mp3         — entering a door/portal transition (SND_PORTAL)
                      original: dragon-studio-sci-fi-portal-jump-01-416163.mp3
