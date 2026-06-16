@@ -124,7 +124,7 @@ static struct {
     float climbT; int climbDir;
     int   turning;
     int   hp, mag, reserve, keys, bombs, shards;
-    int   gunPow, gunSpd, weapon; float reloadT;   // weapon: 0 rifle 1 spread 2 machine 3 laser
+    int   gunPow, gunSpd, weapon, weaponAmmo; float reloadT;   // weapon: 0 rifle 1 spread 2 machine 3 laser
     int   onLift;          // index of the lift the player is riding, or -1
     float hurtT;           // flinch-animation timer
     float meleeCD,meleeT;  // knife cooldown + swing timer
@@ -402,7 +402,7 @@ static void ParseRoom(const char*text,int spawnDoor){
                 case 's': AddEnemy(c,feet,2); break;   // SENTRY: shoots, then ducks into cover
                 case 'M': AddEnemy(c,feet,3); break;   // MALDRAK: the boss
                 case 'n': if(g_npcN<MAXNPC) g_npc[g_npcN++]=(Npc){c,r,IsCollected(g_roomPath,c,r)?1:0}; break;
-                case 'H': case 'B': case '*': case 'K': case 'a': case 'u': case 'U': case 'W': case 'Y': case 'Z': if(g_pkN<MAXPK && !IsCollected(g_roomPath,c,r)) g_pk[g_pkN++]=(Pickup){c,r,t,1}; break;
+                case 'H': case 'B': case '*': case 'K': case 'a': case 'u': case 'U': case 'W': case 'Y': case 'Z': case 'F': case 'R': if(g_pkN<MAXPK && !IsCollected(g_roomPath,c,r)) g_pk[g_pkN++]=(Pickup){c,r,t,1}; break;
                 case 'L': if(g_leverN<MAXLEVER) g_levers[g_leverN++]=(Lever){c,r}; break;
                 case '0':case '1':case '2':case '3':case '4':case '5':case '6':case '7':case '8':case '9':{
                     int id=t-'0'; if(g_doorN<MAXDOOR){ Door*D=&g_doors[g_doorN++]; D->c=c; D->r=r; D->id=id;
@@ -456,7 +456,7 @@ static void RespawnAtCheckpoint(void){
 }
 
 static void NewGame(void){
-    P.hp=P_HP_MAX; P.mag=MAG_MAX; P.reserve=(g_diff==0?18:g_diff==2?8:RESERVE_START); P.gunPow=0; P.gunSpd=0; P.weapon=0; P.reloadT=0;
+    P.hp=P_HP_MAX; P.mag=MAG_MAX; P.reserve=(g_diff==0?18:g_diff==2?8:RESERVE_START); P.gunPow=0; P.gunSpd=0; P.weapon=0; P.weaponAmmo=0; P.reloadT=0;
     P.bombs=1; P.shards=0; P.keys=0; g_keyN=0; g_collN=0; g_won=0; g_areaClear=0; g_victory=0;
     g_areaSeenN=0; g_areaCardT=0;   // re-announce areas for a fresh playthrough
     LoadRoom(g_roomStart,g_startSpawn,1);
@@ -527,7 +527,7 @@ static int NearestInBand(float mx,float ry,int dir,float band,float range){
 }
 static void Fire(int dir){
     if(P.fireCD>0 || P.reloadT>0) return;
-    int special = P.weapon>0;                       // S/M/L are energy weapons: no shell magazine
+    int special = P.weapon>0;                       // pickup weapons run on their own ammo; rifle uses shells
     if(!special && P.mag<=0){
         if(P.reserve>0){ P.reloadT=RELOAD_T; SndPlay(SND_RELOAD); DebugLog("reload","\"start\":true,\"reserve\":%d",P.reserve); Ev("reloading..."); }
         else { P.fireCD=0.25f; SndPlay(SND_DRY); DebugLog("fire","\"dir\":\"%s\",\"dry\":true",dir==P.face?"fwd":"back"); Ev("*click* - no shells"); }
@@ -535,25 +535,40 @@ static void Fire(int dir){
     }
     int dmg = P_DMG + P.gunPow*DMG_PER_POW;
     float pump = fmaxf(PUMP_MIN, PUMP - P.gunSpd*SPD_PER_LVL);
-    float cd=pump; float mx = dir>0 ? P.x+PW : P.x, my=gunY();
-    if(P.weapon==1){            // SPREAD: three angled rays (up / level / down)
+    float cd=pump; int silentFire=0; float mx = dir>0 ? P.x+PW : P.x, my=gunY();
+    if(P.weapon==1){            // SPREAD: three angled rays
         cd=pump*1.05f;
         for(int k=-1;k<=1;k++){ float ry=my+k*18.0f; int hi=NearestInBand(mx,ry,dir,TILE*0.55f,P_RANGE);
             float ex=mx+dir*(hi>=0?(g_en[hi].x+EW*0.5f-mx)*dir:P_RANGE); SpawnShot(mx,my,ex,ry,0); if(hi>=0) HitEnemy(hi,dmg); }
-    } else if(P.weapon==3){     // LASER: piercing beam, hits everything in the line
+    } else if(P.weapon==3){     // LASER: piercing beam
         cd=pump*1.2f; dmg=(int)(dmg*1.35f); float range=P_RANGE*1.4f;
         for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive||e->inCover) continue;
             float ex=e->x+EW*0.5f,ey=e->y+EH*0.5f,d=(ex-mx)*dir; if(d>0&&d<range&&fabsf(ey-my)<TILE*0.55f&&LineClear(mx,ex,my)) HitEnemy(i,dmg); }
         float endx=mx+dir*range; SpawnShot(mx,my-1,endx,my-1,0); SpawnShot(mx,my,endx,my,0); SpawnShot(mx,my+1,endx,my+1,0);
-    } else {                    // RIFLE (0) / MACHINE (2): single shot, machine fires fast
+    } else if(P.weapon==4){     // FLAMETHROWER: rapid short-range spray
+        cd=0.05f; dmg=(int)(dmg*0.4f); if(dmg<1)dmg=1; float range=TILE*3.4f;
+        for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive||e->inCover) continue;
+            float ex=e->x+EW*0.5f,ey=e->y+EH*0.5f,d=(ex-mx)*dir; if(d>0&&d<range&&fabsf(ey-my)<TILE*0.9f&&LineClear(mx,ex,my)) HitEnemy(i,dmg); }
+        for(int k=0;k<5;k++){ float fx=mx+dir*(8+k*14+rand()%10),fy=my+(rand()%18-9); Emit(fx,fy,1,150,0.35f,3.4f,(Color){255,(unsigned char)(120+rand()%90),40,255},1,0); }
+    } else if(P.weapon==5){     // ROCKET LAUNCHER: slow, explosive AoE at impact
+        cd=0.5f; int rdmg=dmg*3; float range=P_RANGE*1.3f; silentFire=1;
+        int hi=NearestInBand(mx,my,dir,TILE*0.7f,range);
+        float ix=mx+dir*(hi>=0?(g_en[hi].x+EW*0.5f-mx)*dir:range); SpawnShot(mx,my,ix,my,0);
+        for(int i=0;i<g_enN;i++){ Enemy*e=&g_en[i]; if(!e->alive) continue; float ex=e->x+EW*0.5f,ey=e->y+EH*0.5f; if((ex-ix)*(ex-ix)+(ey-my)*(ey-my)<BOMB_RADIUS*BOMB_RADIUS) HitEnemy(i,rdmg); }
+        g_boomX=ix; g_boomY=my; g_boomT=0.35f; SndPlay(SND_BOMB); g_shake=fmaxf(g_shake,9.0f);
+        Emit(ix,my,24,380,0.55f,3.2f,(Color){255,170,70,255},1,1);
+    } else {                    // RIFLE (0) / MACHINE (2): single shot
         if(P.weapon==2){ cd=0.075f; dmg=(int)(dmg*0.7f); if(dmg<1)dmg=1; }
         int hi=NearestInBand(mx,my,dir,TILE*0.6f,P_RANGE);
         float endx=mx+dir*(hi>=0?(g_en[hi].x+EW*0.5f-mx)*dir:P_RANGE); SpawnShot(mx,my,endx,my,0);
         if(hi>=0) HitEnemy(hi,dmg);
     }
-    P.fireCD=cd; P.muzzle=0.09f; P.muzzleDir=dir; if(!special) P.mag--; SndPlay(SND_FIRE);
+    P.fireCD=cd; P.muzzle=0.09f; P.muzzleDir=dir;
+    if(special){ if(--P.weaponAmmo<=0){ P.weapon=0; P.weaponAmmo=0; Ev("ammo out - back to rifle"); DebugLog("weapon","\"depleted\":true"); } }
+    else P.mag--;
+    if(!silentFire) SndPlay(SND_FIRE);
     Emit(mx,my,16,460,0.20f,3.0f,(Color){255,225,150,255},1,0); g_shake=fmaxf(g_shake,1.6f); if(!special) Emit(P.x+PW*0.5f,gunY(),1,110,0.6f,1.6f,(Color){210,180,90,255},0,1);
-    DebugLog("fire","\"dir\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"face\":%d,\"dmg\":%d,\"wpn\":%d,\"mag\":%d",dir==P.face?"fwd":"back",mx,my,P.face,dmg,P.weapon,P.mag);
+    DebugLog("fire","\"dir\":\"%s\",\"x\":%.1f,\"y\":%.1f,\"face\":%d,\"dmg\":%d,\"wpn\":%d,\"ammo\":%d,\"mag\":%d",dir==P.face?"fwd":"back",mx,my,P.face,dmg,P.weapon,P.weaponAmmo,P.mag);
     if(!special && P.mag==0 && P.reserve>0){ P.reloadT=RELOAD_T; SndPlay(SND_RELOAD); DebugLog("reload","\"start\":true,\"reserve\":%d",P.reserve); }
     Ev("fire %s", dir==P.face?"fwd":"back");
 }
@@ -758,9 +773,11 @@ static void UpdatePlayer(Input in){
                          case 'a': P.reserve+=AMMO_BOX; nm="shells"; break;
                          case 'u': P.gunSpd++; nm="speed upgrade"; break;
                          case 'U': P.gunPow++; nm="power upgrade"; break;
-                         case 'W': P.weapon=1; nm="SPREAD gun"; break;
-                         case 'Y': P.weapon=2; nm="MACHINE gun"; break;
-                         case 'Z': P.weapon=3; nm="LASER"; break; }
+                         case 'W': P.weapon=1; P.weaponAmmo=40;  nm="SPREAD gun"; break;
+                         case 'Y': P.weapon=2; P.weaponAmmo=80;  nm="MACHINE gun"; break;
+                         case 'Z': P.weapon=3; P.weaponAmmo=30;  nm="LASER"; break;
+                         case 'F': P.weapon=4; P.weaponAmmo=120; nm="FLAMETHROWER"; break;
+                         case 'R': P.weapon=5; P.weaponAmmo=10;  nm="ROCKET launcher"; break; }
         SndPlay(p->kind=='u'||p->kind=='U'?SND_UPGRADE:SND_PICKUP);
         DebugLog("pickup","\"item\":\"%s\",\"x\":%d,\"y\":%d",nm,p->c*TILE,p->r*TILE); Ev("got %s",nm); FloatSpawn(p->c*TILE+TILE*0.5f,(float)(p->r*TILE),TextFormat("+%s",nm));
     } }
@@ -1262,7 +1279,7 @@ static void DrawWorld(void){
         else if(p->kind=='B'){ DrawCircle((int)x,(int)y,12,(Color){50,50,60,255}); DrawCircle((int)x-3,(int)y-3,4,(Color){90,90,104,255}); DrawRectangle((int)x-2,(int)y-19,3,8,(Color){200,120,40,255}); }
         else if(p->kind=='*'){ DrawPoly((Vector2){x,y},4,13,45,(Color){90,220,235,255}); DrawPolyLines((Vector2){x,y},4,13,45,(Color){205,250,255,255}); }
         else if(p->kind=='a'){ DrawRectangle((int)x-10,(int)y-7,20,15,(Color){170,135,70,255}); DrawRectangleLines((int)x-10,(int)y-7,20,15,(Color){90,70,40,255}); DrawRectangle((int)x-10,(int)y-7,20,4,(Color){200,165,95,255}); }
-        else if(p->kind=='W'||p->kind=='Y'||p->kind=='Z'){ Color wc=p->kind=='W'?(Color){90,170,255,255}:p->kind=='Y'?(Color){255,170,70,255}:(Color){120,240,210,255}; const char*wl=p->kind=='W'?"S":p->kind=='Y'?"M":"L"; DrawCircle((int)x,(int)y,12,(Color){26,26,36,255}); DrawCircle((int)x,(int)y,9,wc); DrawCircleLines((int)x,(int)y,12,(Color){240,245,255,255}); int tw=MeasureText(wl,16); DrawText(wl,(int)x-tw/2,(int)y-8,16,(Color){18,18,26,255}); }
+        else if(p->kind=='W'||p->kind=='Y'||p->kind=='Z'||p->kind=='F'||p->kind=='R'){ Color wc=p->kind=='W'?(Color){90,170,255,255}:p->kind=='Y'?(Color){255,170,70,255}:p->kind=='Z'?(Color){120,240,210,255}:p->kind=='F'?(Color){255,110,50,255}:(Color){215,210,95,255}; const char*wl=p->kind=='W'?"S":p->kind=='Y'?"M":p->kind=='Z'?"L":p->kind=='F'?"F":"R"; DrawCircle((int)x,(int)y,12,(Color){26,26,36,255}); DrawCircle((int)x,(int)y,9,wc); DrawCircleLines((int)x,(int)y,12,(Color){240,245,255,255}); int tw=MeasureText(wl,16); DrawText(wl,(int)x-tw/2,(int)y-8,16,(Color){18,18,26,255}); }
         else if(p->kind=='u'){ DrawPoly((Vector2){x,y},3,15,-90,(Color){120,170,255,255}); }   // speed upgrade
         else if(p->kind=='U'){ DrawPoly((Vector2){x,y},3,15,-90,(Color){255,120,120,255}); }   // power upgrade
     }
@@ -1350,8 +1367,9 @@ static void DrawHUD(void){
     Bar(110,12,180,16,P.hp/(float)P_HP_MAX,(Color){210,70,70,255});
     DrawText(TextFormat("HP %d",P.hp),116,12,16,RAYWHITE);
     DrawText(TextFormat("SHELLS %d/%d%s",P.mag,P.reserve,P.reloadT>0?" RELOAD":""),300,12,18,(Color){235,225,160,255});
-    const char*wn=P.weapon==1?"SPREAD":P.weapon==2?"MACHINE":P.weapon==3?"LASER":"RIFLE";
-    DrawText(TextFormat("BOMB %d  SHARD %d  KEY %d  WPN %s P%dS%d",P.bombs,P.shards,P.keys,wn,P.gunPow,P.gunSpd),470,12,18,(Color){180,200,210,255});
+    const char*wn=P.weapon==1?"SPREAD":P.weapon==2?"MACHINE":P.weapon==3?"LASER":P.weapon==4?"FLAME":P.weapon==5?"ROCKET":"RIFLE";
+    if(P.weapon>0) DrawText(TextFormat("BOMB %d  SHARD %d  KEY %d  WPN %s x%d",P.bombs,P.shards,P.keys,wn,P.weaponAmmo),470,12,18,(Color){255,210,120,255});
+    else DrawText(TextFormat("BOMB %d  SHARD %d  KEY %d  WPN %s P%dS%d",P.bombs,P.shards,P.keys,wn,P.gunPow,P.gunSpd),470,12,18,(Color){180,200,210,255});
     DrawText(TextFormat("%s / %s",g_areaName,g_roomName),SCREEN_W-380,12,18,(Color){150,160,180,255});
     DrawText(TextFormat("STATE %s",PStateName()),14,SCREEN_H-26,18,(Color){150,170,190,255});
     DrawText("A/D move  SPACE jump  J fire  K back  V knife  E place/T throw bomb  W use  ` debug",286,SCREEN_H-26,15,(Color){90,100,115,255});
