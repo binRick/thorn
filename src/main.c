@@ -868,101 +868,102 @@ static void EmitState(void){
 //   o=outline  B/b/d/D = cloth light/mid/dark/darkest (tinted per actor)
 //   m/M/n = gun metal mid/light/dark   y=visor glow   k=boot   .=clear
 // Hero = shared 18-row BODY + interchangeable 10-row LEG poses (for a walk cycle).
-static const char *HERO_BODY[] = {
-    "......oooooo........",".....oBBBBBBo.......",".....oBbbbbddo......",".....obbbbbddo......",
-    ".....oyyyyyddo......",".....obbbbbddo......","......obbbddo.......",".......obbo.........",
-    "...oBBBBbbbdddo.....","..oBBbbbbbbbdddo....","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
-    "..obBbbDDDbbddmMMMn.","..obBbbbbbbbddmMMMn.","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
-    "..obbbbbbbbbddo.....","...obDDDDDDDddo.....",
-};
-static const char *HERO_STAND[] = {
-    "...obbbo.obbbo......","...oBbdo.oBbdo......","...obbdo.obbdo......","...obddo.obddo......",
-    "...obddo.obddo......","...okkko.okkko......","..okkko...okkko.....","..oooo.....oooo.....",
-    "...................","...................",
-};
-static const char *HERO_WA[] = {   // stride: front leg forward, back leg trailing
-    "...obbbo.obbbo......","...oBbdo.oBbdo......","..obbo....obbdo.....",".obddo......obddo...",
-    "obddo........obddo..","okko..........okko..","oko............oko..","oo..............oo..",
-    "...................","...................",
-};
-static const char *HERO_WB[] = {   // passing: legs together
-    "...obbbo.obbbo......","...oBbdo.oBbdo......","...obbdo.obbdo......","...obddo.obddo......",
-    "...obddo.obddo......","...okkdo.okkdo......","...okko..okko.......","..oooo...oooo.......",
-    "...................","...................",
-};
-static const char *HERO_WC[] = {   // stride: other leg forward
-    "...obbbo.obbbo......","...oBbdo.oBbdo......","...obbdo....obbo....","...obddo......obddo.",
-    "..obddo........obddo","..okko..........okko","..oko............oko","..oo..............oo",
-    "...................","...................",
-};
-static const char *HERO_BODY_FIRE[] = {   // gun raised + muzzle flare
-    "......oooooo........",".....oBBBBBBo.......",".....oBbbbbddo......",".....obbbbbddo......",
-    ".....oyyyyyddo......",".....obbbbbddo......","......obbbddo.......",".......obbo.........",
-    "...oBBBBbbbdddo.....","..oBBbbbbbbbdddo....","..obBbbDDDbbddmMMMn","..obBbbbbbbbddmMMMw",
-    "..obBbbDDDbbdddo....","..obBbbbbbbbdddo....","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
-    "..obbbbbbbbbddo.....","...obDDDDDDDddo.....",
-};
-static const char *HERO_BODY_HURT[] = {   // head snapped back (flinch)
-    ".....oooooo.........","....oBBBBBBo........","....oBbbbbddo.......","....obbbbbddo.......",
-    "....oyyyyyddo.......","....obbbbbddo.......",".....obbbddo........",".......obbo.........",
-    "...oBBBBbbbdddo.....","..oBBbbbbbbbdddo....","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
-    "..obBbbDDDbbddmMMMn.","..obBbbbbbbbddmMMMn.","..obBbbDDDbbdddo....","..obBbbbbbbbdddo....",
-    "..obbbbbbbbbddo.....","...obDDDDDDDddo.....",
-};
-static const char *HERO_BODY_CLIMB[] = {  // both arms reaching up (no gun)
-    ".....o....o........",".....obo..obo......",".....ob....bo......","......oooooo.......",
-    ".....oBbbbddo......",".....oyyyyddo......",".....obbbbddo......",".......obbo........",
-    "....oBBbbbbo.......","...oBbbbbbbo.......","...obBbbDDbo.......","...obBbbbbbo.......",
-    "...obBbbDDbo.......","...obbbbbbo........","....obDDDdo........","...................",
-    "...................","...................",
-};
-static const char *HERO_CLIMBLEG[] = {    // legs tucked while climbing
-    "....obbo.obbo......","....obdo.obdo......","....okdo.okdo......",".....oko..oko......",
-    "......o....o.......","...................","...................","...................",
-    "...................","...................",
-};
-static const char *SPR_GUARD[] = {
-    "...oo...oo...oo.....","....oBBBBBBBdo......","...oBbbbbbbbddo.....","...obbbbbbbbddo.....",
-    "...oybbbybbbddo.....","...obbbbbbbbddo.....","....obbbbbbddo......","...oBBBBbbbdddo.....",
-    "..oBBbbbbbbbbdddo...","..obBbbDDDDbbdddo...","..obBbbbbbbbbddmMMMn","..obBbbDDDDbbddmMMMn",
-    "..obBbbbbbbbbdddo...","..obBbbDDDDbbdddo...","..obbbbbbbbbbddo....","...obDDDDDDDDddo....",
-    "...obbbbo.obbbbo....","...obbo....obbo.....","...obdo....obdo.....","...obdo....obdo.....",
-    "...obDo....obDo.....","...okko....okko.....","..okkko...okkko.....",".oooo......oooo....",
-    "...................","...................","...................","...................",
-};
-#define SPR_ROWS 28
-
-static Color shade(Color c,float f){   // self-contained (no iclamp dependency)
+// ---- Procedural sprites -----------------------------------------------------
+// Original art: a parametric armored figure drawn from primitives into a
+// material-id buffer, then shaded (rim light on the lit edge, dark contour on
+// the shadow edge, top-down form shading, emissive visor) for a modern metallic
+// look. No external or third-party sprite data.
+#define SPR_W 26
+#define SPR_H 42
+static unsigned char g_idbuf[SPR_H][SPR_W];
+static Color shade(Color c,float f){
     int r=(int)(c.r*f),g=(int)(c.g*f),b=(int)(c.b*f);
-    return (Color){ r>255?255:(unsigned char)r, g>255?255:(unsigned char)g, b>255?255:(unsigned char)b, 255 };
+    return (Color){ (unsigned char)(r>255?255:r<0?0:r),(unsigned char)(g>255?255:g<0?0:g),(unsigned char)(b>255?255:b<0?0:b),255 };
 }
-static Color SprPal(char k, Color cloth){
-    switch(k){
-        case 'o': return (Color){14,12,18,255};        // outline
-        case 'B': return shade(cloth,1.40f);           // cloth highlight
-        case 'b': return cloth;                         // cloth mid
-        case 'd': return shade(cloth,0.66f);           // cloth shadow
-        case 'D': return shade(cloth,0.42f);           // cloth deep shadow
-        case 'm': return (Color){120,126,140,255};     // gun mid
-        case 'M': return (Color){180,186,200,255};     // gun highlight
-        case 'n': return (Color){58,62,74,255};        // gun dark
-        case 'y': return (Color){120,228,236,255};     // visor glow
-        case 'k': return (Color){52,40,32,255};        // boot
-        case 'w': return (Color){240,240,245,255};     // spec highlight
-        default:  return (Color){0,0,0,0};
+// material ids: 1 armor 2 dark-armor/recess 3 skin 4 visor(emissive) 5 gun 6 boot 7 lit accent
+static Color matCol(int id,Color cloth){
+    switch(id){
+        case 1: return cloth;
+        case 2: return shade(cloth,0.55f);
+        case 3: return (Color){216,172,142,255};
+        case 4: return (Color){140,236,240,255};
+        case 5: return (Color){142,150,166,255};
+        case 6: return (Color){48,42,38,255};
+        case 7: return shade(cloth,1.22f);
+        case 8: return (Color){255,104,82,255};
+        default:return (Color){0,0,0,0};
     }
 }
-static Image ImgFromAscii(const char**rows,int h,Color cloth){
-    int w=(int)strlen(rows[0]); Image im=GenImageColor(w,h,(Color){0,0,0,0});
-    for(int y=0;y<h;y++){ const char*R=rows[y]; int rw=(int)strlen(R);
-        for(int x=0;x<w&&x<rw;x++){ Color c=SprPal(R[x],cloth); if(c.a) ImageDrawPixel(&im,x,y,c); } }
+static void fillRect(int x0,int y0,int x1,int y1,int id){
+    if(x0<0)x0=0; if(y0<0)y0=0; if(x1>SPR_W-1)x1=SPR_W-1; if(y1>SPR_H-1)y1=SPR_H-1;
+    for(int y=y0;y<=y1;y++) for(int x=x0;x<=x1;x++) g_idbuf[y][x]=(unsigned char)id;
+}
+static void fillDisc(int cx,int cy,int rx,int ry,int id){
+    for(int y=-ry;y<=ry;y++) for(int x=-rx;x<=rx;x++){
+        float u=rx?(float)x/rx:0,v=ry?(float)y/ry:0; if(u*u+v*v<=1.05f){ int px=cx+x,py=cy+y;
+            if(px>=0&&px<SPR_W&&py>=0&&py<SPR_H) g_idbuf[py][px]=(unsigned char)id; } }
+}
+// Shade g_idbuf into an image: contour, rim light, form shade, emissive visor.
+static Image ShadeBuf(Color cloth){
+    Image im=GenImageColor(SPR_W,SPR_H,(Color){0,0,0,0});
+    const Color RIM={210,226,255,255};
+    for(int y=0;y<SPR_H;y++) for(int x=0;x<SPR_W;x++){
+        int id=g_idbuf[y][x];
+        int up=y>0?g_idbuf[y-1][x]:0, dn=y<SPR_H-1?g_idbuf[y+1][x]:0;
+        int lf=x>0?g_idbuf[y][x-1]:0, rt=x<SPR_W-1?g_idbuf[y][x+1]:0;
+        if(!id){ if(up||dn||lf||rt) ImageDrawPixel(&im,x,y,(Color){15,13,19,255}); continue; }
+        Color base=matCol(id,cloth);
+        if(id==4||id==8){ Color hot=id==4?(Color){205,250,252,255}:(Color){255,182,150,255}; ImageDrawPixel(&im,x,y,(lf==id&&rt==id)?hot:base); continue; }
+        if(dn==0||rt==0){ ImageDrawPixel(&im,x,y,shade(base,0.45f)); continue; }
+        if(up==0||lf==0){ ImageDrawPixel(&im,x,y,(Color){(unsigned char)((base.r+2*RIM.r)/3),(unsigned char)((base.g+2*RIM.g)/3),(unsigned char)((base.b+2*RIM.b)/3),255}); continue; }
+        float f=1.12f-0.40f*((float)y/SPR_H)+0.06f*(1.0f-(float)x/SPR_W);
+        ImageDrawPixel(&im,x,y,shade(base,f));
+    }
     return im;
 }
-// Compose a shared 18-row body + a 10-row leg pose into one 28-row actor frame.
-static Image ComposeFrame(const char**body,const char**legs,Color cloth){
-    const char* rows[28]; for(int i=0;i<18;i++) rows[i]=body[i]; for(int i=0;i<10;i++) rows[18+i]=legs[i];
-    return ImgFromAscii(rows,28,cloth);
+// Build the hero into g_idbuf. legPhase 0..3 (walk), armUp raises the gun, lean
+// shifts the head (hurt), reach = climbing pose.
+static void BuildHero(int legPhase,int armUp,int lean,int reach){
+    memset(g_idbuf,0,sizeof g_idbuf);
+    int hx=13+lean;
+    fillRect(6,14,8,22,2);                              // backpack
+    fillRect(8,12,17,26,1);                             // torso
+    fillRect(12,14,12,25,2);                            // center seam
+    fillRect(9,16,10,19,2); fillRect(15,16,16,19,7);    // chest panels (shadow / lit)
+    fillRect(8,12,10,13,7); fillRect(15,12,17,13,7);    // shoulder highlights
+    fillRect(8,25,17,27,2);                             // belt
+    fillDisc(hx,7,4,5,1);                               // helmet
+    if(reach){
+        fillRect(7,7,9,14,1); fillRect(16,7,18,14,1);   // both arms up
+        fillRect(6,3,8,8,1);  fillRect(17,3,19,8,1);
+    } else {
+        fillRect(7,14,9,22,2);                          // rear arm
+        if(armUp){ fillRect(15,11,17,15,1); fillRect(16,8,20,11,5); fillRect(20,6,23,9,5); }     // gun raised
+        else     { fillRect(15,15,18,18,1); fillRect(18,16,24,18,5); fillRect(23,15,24,19,5); }  // gun forward
+    }
+    fillRect(hx-1,5,hx+3,6,4);                          // visor band (front)
+    if(legPhase==1){ fillRect(8,27,10,33,1); fillRect(6,33,9,39,1); fillRect(14,27,16,33,1); fillRect(16,33,19,39,1); fillRect(5,39,9,41,6); fillRect(16,39,20,41,6); }
+    else if(legPhase==3){ fillRect(15,27,17,33,1); fillRect(17,33,20,39,1); fillRect(10,27,12,33,1); fillRect(7,33,10,39,1); fillRect(17,39,21,41,6); fillRect(6,39,10,41,6); }
+    else if(legPhase==2){ fillRect(10,27,12,39,1); fillRect(13,27,15,39,1); fillRect(9,39,13,41,6); fillRect(13,39,17,41,6); }
+    else { fillRect(9,27,11,39,1); fillRect(14,27,16,39,1); fillRect(8,39,12,41,6); fillRect(14,39,18,41,6); }
 }
+static Image HeroFrame(Color cloth,int legPhase,int armUp,int lean,int reach){ BuildHero(legPhase,armUp,lean,reach); return ShadeBuf(cloth); }
+// Bulkier antagonist build.
+static void BuildEnemy(int legPhase){
+    memset(g_idbuf,0,sizeof g_idbuf);
+    fillRect(4,13,8,23,2);                              // heavy back
+    fillRect(6,11,18,27,1);                             // wide torso
+    fillRect(12,13,13,26,2);
+    fillRect(8,15,10,20,2); fillRect(15,15,17,20,7);
+    fillRect(6,26,18,28,2);                             // belt
+    fillDisc(12,7,5,5,1);                               // big head
+    fillRect(9,5,16,6,8);                               // menacing red visor
+    fillRect(5,14,7,23,1);                              // rear arm
+    fillRect(15,15,18,18,1); fillRect(18,16,25,18,5); fillRect(24,15,25,19,5);  // gun
+    if(legPhase==1){ fillRect(7,28,10,39,1); fillRect(14,28,17,39,1); fillRect(6,39,11,41,6); fillRect(14,39,19,41,6); }
+    else { fillRect(8,28,11,39,1); fillRect(14,28,17,39,1); fillRect(7,39,12,41,6); fillRect(14,39,19,41,6); }
+}
+static Image EnemyFrame(Color cloth,int legPhase){ BuildEnemy(legPhase); return ShadeBuf(cloth); }
 static int iclamp(int v,int a,int b){ return v<a?a:(v>b?b:v); }
 static Image ImgStone(Color base,int cracked){
     int n=TILE; Image im=GenImageColor(n,n,base);
@@ -995,12 +996,12 @@ static Strip LoadStrip(const char*path,int frames,float fps){
 static int AnimF(Strip*s){ return s->frames>1 ? (int)(GetTime()*s->fps) : 0; }   // current frame index
 static void InitSprites(void){
     Image im;
-    im=ComposeFrame(HERO_BODY,HERO_STAND,(Color){92,150,235,255}); g_tHeroIdle=LoadTextureFromImage(im); UnloadImage(im);
-    im=ComposeFrame(HERO_BODY,HERO_WB,(Color){92,150,235,255}); g_tHeroWalk=LoadTextureFromImage(im); UnloadImage(im);
-    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){200,72,72,255});  g_tEnemy[0]=LoadTextureFromImage(im); UnloadImage(im);
-    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){170,70,60,255});  g_tEnemy[1]=LoadTextureFromImage(im); UnloadImage(im);
-    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){156,90,196,255}); g_tEnemy[2]=LoadTextureFromImage(im); UnloadImage(im);
-    im=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){164,44,64,255});  g_tEnemy[3]=LoadTextureFromImage(im); UnloadImage(im);   // MALDRAK
+    im=HeroFrame((Color){92,150,235,255},0,0,0,0); g_tHeroIdle=LoadTextureFromImage(im); UnloadImage(im);
+    im=HeroFrame((Color){92,150,235,255},2,0,0,0); g_tHeroWalk=LoadTextureFromImage(im); UnloadImage(im);
+    im=EnemyFrame((Color){200,72,72,255},0);  g_tEnemy[0]=LoadTextureFromImage(im); UnloadImage(im);
+    im=EnemyFrame((Color){170,70,60,255},0);  g_tEnemy[1]=LoadTextureFromImage(im); UnloadImage(im);
+    im=EnemyFrame((Color){156,90,196,255},0); g_tEnemy[2]=LoadTextureFromImage(im); UnloadImage(im);
+    im=EnemyFrame((Color){164,44,64,255},0);  g_tEnemy[3]=LoadTextureFromImage(im); UnloadImage(im);   // MALDRAK
     im=ImgStone((Color){58,54,64,255},0); g_tStone=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgStone((Color){78,64,52,255},1); g_tCrack=LoadTextureFromImage(im); UnloadImage(im);
     im=ImgBridge(); g_tBridge=LoadTextureFromImage(im); UnloadImage(im);
@@ -1024,18 +1025,23 @@ static void InitSprites(void){
 }
 // Export the sprites to a PNG (no window needed) for visual review.
 static int DumpSprites(void){
-    Image a[9]; int n=0;
-    a[n++]=ComposeFrame(HERO_BODY,HERO_STAND,(Color){92,150,235,255});
-    a[n++]=ComposeFrame(HERO_BODY,HERO_WB,(Color){92,150,235,255});
-    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){200,72,72,255});
-    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){156,90,196,255});
-    a[n++]=ImgFromAscii(SPR_GUARD,SPR_ROWS,(Color){164,44,64,255});
+    Color blue={92,150,235,255};
+    Image a[12]; int n=0;
+    a[n++]=HeroFrame(blue,0,0,0,0);      // idle
+    a[n++]=HeroFrame(blue,1,0,0,0);      // walk A
+    a[n++]=HeroFrame(blue,3,0,0,0);      // walk C
+    a[n++]=HeroFrame(blue,0,1,0,0);      // fire
+    a[n++]=HeroFrame(blue,0,0,-2,0);     // hurt (head back)
+    a[n++]=HeroFrame(blue,0,0,0,1);      // climb
+    a[n++]=EnemyFrame((Color){200,72,72,255},0);   // skarl
+    a[n++]=EnemyFrame((Color){170,70,60,255},0);   // brute
+    a[n++]=EnemyFrame((Color){156,90,196,255},0);  // sentry
+    a[n++]=EnemyFrame((Color){164,44,64,255},0);   // maldrak
     a[n++]=ImgStone((Color){58,54,64,255},0);
     a[n++]=ImgStone((Color){78,64,52,255},1);
-    a[n++]=ImgBridge();
-    Image sheet=GenImageColor(800,140,(Color){28,28,38,255});
-    int x=12, sc=4;
-    for(int i=0;i<n;i++){ ImageDraw(&sheet,a[i],(Rectangle){0,0,(float)a[i].width,(float)a[i].height},(Rectangle){(float)x,18,(float)a[i].width*sc,(float)a[i].height*sc},WHITE); x+=a[i].width*sc+12; UnloadImage(a[i]); }
+    Image sheet=GenImageColor(1060,170,(Color){26,26,34,255});
+    int x=12, sc=3;
+    for(int i=0;i<n;i++){ ImageDraw(&sheet,a[i],(Rectangle){0,0,(float)a[i].width,(float)a[i].height},(Rectangle){(float)x,20,(float)a[i].width*sc,(float)a[i].height*sc},WHITE); x+=a[i].width*sc+10; UnloadImage(a[i]); }
     ExportImage(sheet,"thorn-sprites.png"); UnloadImage(sheet);
     printf("wrote thorn-sprites.png\n"); return 0;
 }
@@ -1050,15 +1056,15 @@ static void StripExport(const char*path,Image*frames,int n,const int*yoff){
 // are what the drop-in loader reads; replace them with any CC0 pack to reskin.
 static int GenAssets(void){
     Color blue={92,150,235,255}; int bob[2]={0,1};
-    { Image f0=ComposeFrame(HERO_BODY,HERO_STAND,blue),f1=ComposeFrame(HERO_BODY,HERO_STAND,blue); Image fr[2]={f0,f1}; StripExport("assets/sprites/hero_idle.png",fr,2,bob); UnloadImage(f0); UnloadImage(f1); }
-    { Image a=ComposeFrame(HERO_BODY,HERO_WA,blue),b=ComposeFrame(HERO_BODY,HERO_WB,blue),c=ComposeFrame(HERO_BODY,HERO_WC,blue); Image fr[4]={a,b,c,b}; StripExport("assets/sprites/hero_walk.png",fr,4,NULL); UnloadImage(a); UnloadImage(b); UnloadImage(c); }
-    { Image f=ComposeFrame(HERO_BODY_FIRE,HERO_STAND,blue); Image fr[1]={f}; StripExport("assets/sprites/hero_fire.png",fr,1,NULL); UnloadImage(f); }
-    { Image f=ComposeFrame(HERO_BODY_HURT,HERO_STAND,blue); Image fr[1]={f}; StripExport("assets/sprites/hero_hurt.png",fr,1,NULL); UnloadImage(f); }
-    { Image c0=ComposeFrame(HERO_BODY_CLIMB,HERO_CLIMBLEG,blue),c1=ComposeFrame(HERO_BODY_CLIMB,HERO_CLIMBLEG,blue); Image fr[2]={c0,c1}; int yo[2]={0,1}; StripExport("assets/sprites/hero_climb.png",fr,2,yo); UnloadImage(c0); UnloadImage(c1); }
+    { Image f0=HeroFrame(blue,0,0,0,0),f1=HeroFrame(blue,0,0,0,0); Image fr[2]={f0,f1}; StripExport("assets/sprites/hero_idle.png",fr,2,bob); UnloadImage(f0); UnloadImage(f1); }
+    { Image a=HeroFrame(blue,1,0,0,0),b=HeroFrame(blue,2,0,0,0),c=HeroFrame(blue,3,0,0,0); Image fr[4]={a,b,c,b}; StripExport("assets/sprites/hero_walk.png",fr,4,NULL); UnloadImage(a); UnloadImage(b); UnloadImage(c); }
+    { Image f=HeroFrame(blue,0,1,0,0); Image fr[1]={f}; StripExport("assets/sprites/hero_fire.png",fr,1,NULL); UnloadImage(f); }
+    { Image f=HeroFrame(blue,0,0,-2,0); Image fr[1]={f}; StripExport("assets/sprites/hero_hurt.png",fr,1,NULL); UnloadImage(f); }
+    { Image c0=HeroFrame(blue,0,0,0,1),c1=HeroFrame(blue,0,0,0,1); Image fr[2]={c0,c1}; int yo[2]={0,1}; StripExport("assets/sprites/hero_climb.png",fr,2,yo); UnloadImage(c0); UnloadImage(c1); }
     const char*ef[4]={"skarl","brute","sentry","maldrak"};
     Color ec[4]={{200,72,72,255},{170,70,60,255},{156,90,196,255},{164,44,64,255}};
     for(int i=0;i<4;i++){ char p[128]; snprintf(p,sizeof p,"assets/sprites/%s.png",ef[i]);
-        Image g0=ImgFromAscii(SPR_GUARD,SPR_ROWS,ec[i]),g1=ImgFromAscii(SPR_GUARD,SPR_ROWS,ec[i]); Image fr[2]={g0,g1}; StripExport(p,fr,2,bob); UnloadImage(g0); UnloadImage(g1); }
+        Image g0=EnemyFrame(ec[i],0),g1=EnemyFrame(ec[i],1); Image fr[2]={g0,g1}; StripExport(p,fr,2,NULL); UnloadImage(g0); UnloadImage(g1); }
     printf("wrote assets/sprites/*.png\n"); return 0;
 }
 // Draw an actor texture into AABB (ax,ay,aw,ah), feet-aligned, flipped by face.
