@@ -1673,7 +1673,7 @@ int main(int argc,char**argv){
 #endif
     }
 
-    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.9.1\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
+    DebugLog("boot","\"raylib\":\"%s\",\"build\":\"0.9.2\",\"headless\":%s",THORN_RAYLIB,g_headless?"true":"false");
     DebugLog("window","\"w\":%d,\"h\":%d,\"monitor\":%d",SCREEN_W,SCREEN_H,g_headless?0:GetCurrentMonitor());
 
     // New game: stats, then the first room (LoadRoom logs its own "level" event).

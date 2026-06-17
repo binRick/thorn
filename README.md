@@ -12,7 +12,7 @@ on **raylib 6.0**. Weighty traversal (with a jump); a pump-shotgun that fires fo
 **and over the shoulder**; ducking into background **shadow alcoves** to let
 bullets pass. Original art, naming, and levels — see **[DESIGN.md](DESIGN.md)**.
 
-Status: **v0.9.1** — playable end-to-end with a title menu (Easy/Normal/Hard,
+Status: **v0.9.2** — playable end-to-end with a title menu (Easy/Normal/Hard,
 persisted), an animated hero (idle/walk/fire/hurt/climb), a knife, a selectable
 pause menu, dynamic lighting + per-area ambient particles + screen-shake, a
 camera that leads where you face, floating damage numbers, "now entering" area
@@ -22,7 +22,8 @@ Ashlands → the Usurper's Keep) linked end-to-end, a Daystone-shard gate, NPC
 gifts/hints, area passwords, and the **Maldrak boss**. On top of sprite art, a
 sampled shotgun SFX, a **jump** (`Space`), and combat & items depth over the
 Sunken Mines area — magazine/reserve ammo with auto-reload, shotgun power/speed upgrades,
-placed bombs that blow cracked walls, moving lifts that carry you, three enemy
+placed bombs that blow cracked walls, moving lifts that carry you (one-way — you
+can jump up through them), three enemy
 types (shooter / advancing brute / cover-using sentry), and procedural audio.
 Built on the M1 room graph (doors, keys/locked doors, lever→bridge, checkpoints).
 Actors and tiles now render as **original, code-generated pixel-art sprites**
