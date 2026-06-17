@@ -666,16 +666,22 @@ static void UpdateLifts(void){
         L->dx=nx-L->x; L->dy=ny-L->y; L->x=nx; L->y=ny; }
     if(P.onLift>=0 && P.onLift<g_liftN && !P.dead){ P.x+=g_lifts[P.onLift].dx; P.y+=g_lifts[P.onLift].dy; }
 }
-// Resolve the player against lift AABBs (solid + landing); called after tile
-// collision. Sets P.onLift when the player is resting on a platform top.
+// Resolve the player against lift platforms; called after tile collision.
+// Lifts are ONE-WAY platforms: you can always jump up through them from below
+// (and pass through their sides) — they only catch you when you descend onto
+// the top. So a rising or lowering platform never blocks a jump from beneath.
+// Sets P.onLift when the player is resting on a platform top.
 static void ResolveLifts(void){
     P.onLift=-1;
     for(int i=0;i<g_liftN;i++){ Lift*L=&g_lifts[i];
-        if(P.x+PW>L->x && P.x<L->x+L->w && P.y+PH>L->y && P.y<L->y+L->h){
-            float penL=(P.x+PW)-L->x, penR=(L->x+L->w)-P.x, penT=(P.y+PH)-L->y, penB=(L->y+L->h)-P.y;
-            float minH=penL<penR?penL:penR, minV=penT<penB?penT:penB;
-            if(minV<=minH){ if(penT<penB){ P.y=L->y-PH-0.01f; if(P.vy>0)P.vy=0; P.onGround=1; P.onLift=i; } else { P.y=L->y+L->h+0.01f; if(P.vy<0)P.vy=0; } }
-            else { if(penL<penR) P.x=L->x-PW-0.01f; else P.x=L->x+L->w+0.01f; P.vx=0; }
+        if(P.x+PW>L->x && P.x<L->x+L->w){                       // horizontally over the platform
+            float feet=P.y+PH, top=L->y, prevFeet=feet-P.vy*DT; // prevFeet: feet before this frame's fall
+            // Land only when the feet cross the top going downward (relative to
+            // the player); moving up (vy<0) always passes through. The swept
+            // prevFeet test also stops a fast faller from tunnelling the thin top.
+            if(P.vy>=0 && prevFeet<=top+1.0f && feet>=top){
+                P.y=top-PH-0.01f; P.vy=0; P.onGround=1; P.onLift=i;
+            }
         }
     }
 }
